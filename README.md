@@ -154,4 +154,4 @@ Distributed under the MIT License. See [LICENSE][license-url] for more informati
 <!-- MARKDOWN LINKS & IMAGES -->
 [python-shield]: https://img.shields.io/badge/python-3.6.8-brightgreen?style=flat-square
 [license-shield]: https://img.shields.io/github/license/quantrancse/nettruyen-downloader?style=flat-square
-[license-url]: https://github.com/quantrancse/nettruyen-downloader/blob/master/LICENSE
+[license-url]: https://github.com/quantrancse/hako2epub/blob/master/LICENSE
