@@ -75,7 +75,7 @@ pip install ebooklib bs4 pillow argparse
 **_Notes:_** _I only tested on python 3.6.8_
 
 ### Usage
-```sh
+```bash
 usage: hako2epub.py [-h] [-v ln_url] [-u [ln_url]] [-uv ln_url] [ln_url]
 
 positional arguments:
