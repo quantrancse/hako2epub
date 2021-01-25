@@ -186,7 +186,7 @@ class EpubEngine():
         try:
             print('Making cover image...')
             img = Image.open(requests.get(
-                self.volume.cover_img, stream=True).raw)
+                self.volume.cover_img, stream=True).raw).convert('RGB')
             b = BytesIO()
             img.save(b, 'jpeg')
             b_img = b.getvalue()
@@ -287,7 +287,7 @@ class EpubEngine():
             content = str(chapter_content)
             for i, img_url in enumerate(img_urls):
                 try:
-                    img = Image.open(requests.get(img_url, stream=True).raw)
+                    img = Image.open(requests.get(img_url, stream=True).raw).convert('RGB')
                     b = BytesIO()
                     img.save(b, 'jpeg')
                     b_img = b.getvalue()
