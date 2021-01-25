@@ -75,7 +75,7 @@ pip install ebooklib bs4 pillow argparse
 **_Notes:_** _I only tested on python 3.6.8_
 
 ### Usage
-```sh
+```bash
 usage: hako2epub.py [-h] [-v ln_url] [-u [ln_url]] [-uv ln_url] [ln_url]
 
 positional arguments:
@@ -154,4 +154,4 @@ Distributed under the MIT License. See [LICENSE][license-url] for more informati
 <!-- MARKDOWN LINKS & IMAGES -->
 [python-shield]: https://img.shields.io/badge/python-3.6.8-brightgreen?style=flat-square
 [license-shield]: https://img.shields.io/github/license/quantrancse/nettruyen-downloader?style=flat-square
-[license-url]: https://github.com/quantrancse/nettruyen-downloader/blob/master/LICENSE
+[license-url]: https://github.com/quantrancse/hako2epub/blob/master/LICENSE
