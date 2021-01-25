@@ -44,7 +44,7 @@ A tool to download light novels on [ln.hako.re](https://ln.hako.re) as the epub 
 
 **_Notes:_**
 * _This tool is a personal standalone project, it does not have any related to [ln.hako.re](https://ln.hako.re) administrators._
-* _If possible, please support the website, original light novel and light novel translation authors._
+* _If possible, please support the website, original light novel, and light novel translation authors._
 * _This tool is for non-commercial purpose only._
 
 ### Features
