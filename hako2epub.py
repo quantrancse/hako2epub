@@ -12,6 +12,7 @@ from PIL import Image
 HEADERS = {
     'user-agent': ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.1916.47 Safari/537.36')}
 
+
 class Utils():
 
     def re_url(self, ln_url, url):
@@ -30,6 +31,7 @@ class Utils():
             if '.' not in image_url[-5:]:
                 image_url += '.jpg'
         return Image.open(requests.get(image_url, headers=HEADERS, stream=True, timeout=10).raw).convert('RGB')
+
 
 class UpdateLN():
 
@@ -63,8 +65,9 @@ class UpdateLN():
             new_ln = new_ln.getLNInfo(old_ln_url, soup, 'default')
 
             if mode == 'updatevol':
-                volume_titles = [vol_item.get('vol_name') for vol_item in old_ln.get('vol_list')]
-                
+                volume_titles = [vol_item.get('vol_name')
+                                 for vol_item in old_ln.get('vol_list')]
+
                 print('Select a volume to update:\n')
                 for i, volume_title in enumerate(volume_titles):
                     print(str(i) + ': ' + volume_title + '\n')
@@ -112,8 +115,9 @@ class UpdateLN():
             print('Updating ln_info.json...')
             with open('ln_info.json', 'r', encoding='utf-8') as read_file:
                 save_file = json.load(read_file)
-            
-            ln_url_list = [ln_item.get('ln_url') for ln_item in save_file.get('ln_list')]
+
+            ln_url_list = [ln_item.get('ln_url')
+                           for ln_item in save_file.get('ln_list')]
 
             if ln.url not in ln_url_list:
                 current_ln = {}
@@ -129,9 +133,9 @@ class UpdateLN():
                     current_volume['chapter_list'] = list(
                         volume.chapter_list.keys())
                     current_ln['vol_list'].append(current_volume)
-                
+
                 save_file['ln_list'].append(current_ln)
-            
+
             else:
                 for i, ln_item in enumerate(save_file.get('ln_list')):
                     if ln.url == ln_item.get('ln_url'):
@@ -144,7 +148,8 @@ class UpdateLN():
                                 new_vol['num_chapter'] = ln_vol.num_chapter
                                 new_vol['chapter_list'] = list(
                                     ln_vol.chapter_list.keys())
-                                save_file['ln_list'][i]['vol_list'].append(new_vol)
+                                save_file['ln_list'][i]['vol_list'].append(
+                                    new_vol)
                             else:
                                 for j, ln_item_vol in enumerate(ln_item.get('vol_list')):
                                     if ln_vol.name == ln_item_vol.get('vol_name'):
@@ -152,7 +157,6 @@ class UpdateLN():
                                             if chapter not in ln_item_vol.get('chapter_list'):
                                                 save_file['ln_list'][i]['vol_list'][j]['chapter_list'].append(
                                                     chapter)
-                
 
             with open('ln_info.json', 'w', encoding='utf-8') as outfile:
                 json.dump(save_file, outfile, indent=4, ensure_ascii=False)
@@ -260,7 +264,8 @@ class EpubEngine():
             print('Making chapter contents...')
             for i, chapter in enumerate(self.volume.chapter_list.keys(), i):
                 chapter_url = self.volume.chapter_list[chapter]
-                request = requests.get(chapter_url, headers=HEADERS, timeout=10)
+                request = requests.get(
+                    chapter_url, headers=HEADERS, timeout=10)
                 soup = BeautifulSoup(request.text, 'html.parser')
 
                 xhtml_file = 'chap_%s.xhtml' % str(i + 1)
@@ -496,7 +501,8 @@ class LNInfo():
         try:
             if mode == 'default':
                 for volume_url in volume_urls:
-                    request = requests.get(volume_url, headers=HEADERS, timeout=10)
+                    request = requests.get(
+                        volume_url, headers=HEADERS, timeout=10)
                     soup = BeautifulSoup(request.text, 'html.parser')
 
                     self.volume_list.append(Volume(volume_url, soup))
