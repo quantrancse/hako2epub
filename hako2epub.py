@@ -9,6 +9,8 @@ from bs4 import BeautifulSoup
 from ebooklib import epub
 from PIL import Image
 
+HEADERS = {
+    'user-agent': ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.1916.47 Safari/537.36')}
 
 class Utils():
 
@@ -23,6 +25,11 @@ class Utils():
     def format_text(self, text):
         return text.strip().replace('\n', '')
 
+    def getImage(self, image_url):
+        if 'imgur.com' in image_url:
+            if '.' not in image_url[-5:]:
+                image_url += '.jpg'
+        return Image.open(requests.get(image_url, headers=HEADERS, stream=True, timeout=10).raw).convert('RGB')
 
 class UpdateLN():
 
@@ -50,7 +57,7 @@ class UpdateLN():
     def checkUpdateLN(self, old_ln, mode):
         old_ln_url = old_ln.get('ln_url')
         try:
-            request = requests.get(old_ln_url, timeout=5)
+            request = requests.get(old_ln_url, headers=HEADERS, timeout=10)
             soup = BeautifulSoup(request.text, 'html.parser')
             new_ln = LNInfo()
             new_ln = new_ln.getLNInfo(old_ln_url, soup, 'default')
@@ -185,8 +192,7 @@ class EpubEngine():
     def makeCoverImage(self):
         try:
             print('Making cover image...')
-            img = Image.open(requests.get(
-                self.volume.cover_img, stream=True).raw).convert('RGB')
+            img = Utils().getImage(self.volume.cover_img)
             b = BytesIO()
             img.save(b, 'jpeg')
             b_img = b.getvalue()
@@ -254,7 +260,7 @@ class EpubEngine():
             print('Making chapter contents...')
             for i, chapter in enumerate(self.volume.chapter_list.keys(), i):
                 chapter_url = self.volume.chapter_list[chapter]
-                request = requests.get(chapter_url, timeout=5)
+                request = requests.get(chapter_url, headers=HEADERS, timeout=10)
                 soup = BeautifulSoup(request.text, 'html.parser')
 
                 xhtml_file = 'chap_%s.xhtml' % str(i + 1)
@@ -287,7 +293,7 @@ class EpubEngine():
             content = str(chapter_content)
             for i, img_url in enumerate(img_urls):
                 try:
-                    img = Image.open(requests.get(img_url, stream=True).raw).convert('RGB')
+                    img = Utils().getImage(img_url)
                     b = BytesIO()
                     img.save(b, 'jpeg')
                     b_img = b.getvalue()
@@ -315,7 +321,7 @@ class EpubEngine():
 
         try:
             self.book.set_cover('cover.jpeg', requests.get(
-                self.volume.cover_img, stream=True).content)
+                self.volume.cover_img, headers=HEADERS, stream=True, timeout=10).content)
         except:
             print('Error: Can not set cover image!')
 
@@ -490,7 +496,7 @@ class LNInfo():
         try:
             if mode == 'default':
                 for volume_url in volume_urls:
-                    request = requests.get(volume_url, timeout=5)
+                    request = requests.get(volume_url, headers=HEADERS, timeout=10)
                     soup = BeautifulSoup(request.text, 'html.parser')
 
                     self.volume_list.append(Volume(volume_url, soup))
@@ -515,7 +521,7 @@ class LNInfo():
 
                 if selected_volume in range(len(volume_urls)):
                     request = requests.get(
-                        volume_urls[selected_volume], timeout=5)
+                        volume_urls[selected_volume], headers=HEADERS, timeout=10)
                     soup = BeautifulSoup(request.text, 'html.parser')
 
                     self.volume_list.append(
@@ -552,7 +558,7 @@ class Engine():
                     UpdateLN().checkUpdate(ln_url, 'updatevol')
 
             elif self.checkValidUrl(ln_url):
-                request = requests.get(ln_url, timeout=5)
+                request = requests.get(ln_url, headers=HEADERS, timeout=10)
                 soup = BeautifulSoup(request.text, 'html.parser')
                 if not soup.find('section', 'volume-list'):
                     print('Invalid url. Please try again.')
