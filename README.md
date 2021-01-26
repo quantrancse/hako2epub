@@ -125,6 +125,7 @@ python hako2epub.py -uv light_novel_url
 * I only tested on some of my favorite light novels.
 * Some images have a blank page before them (Caused by the center image code).
 * Images may crash on some epub readers.
+* Can not get image from some image hosts.
 
 <!-- CONTRIBUTING -->
 ## Contributing
