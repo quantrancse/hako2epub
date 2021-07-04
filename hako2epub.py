@@ -492,8 +492,13 @@ class LNInfo():
     def set_ln_series_info(self, soup):
         series_infomation = soup.find('div', 'series-information')
         self.series_info = str(series_infomation)
-        self.author = Utils().format_text(series_infomation.findAll(
-            'div', 'info-item')[0].find('a').text)
+        author_div = series_infomation.findAll('div', 'info-item')[0].find('a')
+        if author_div:
+            self.author = Utils().format_text(series_infomation.findAll(
+                'div', 'info-item')[0].find('a').text)
+        else:
+            self.author = Utils().format_text(series_infomation.findAll(
+                'div', 'info-item')[1].find('a').text)
 
     def set_ln_summary(self, soup):
         self.summary = '<h4>Tóm tắt</h4>'
