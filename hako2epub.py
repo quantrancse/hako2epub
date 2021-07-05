@@ -358,7 +358,7 @@ class EpubEngine():
         epub_name = epub_name.replace(' ', '-')
         self.set_metadata(epub_name, self.ln.author)
 
-        epub_folder = self.ln.name.replace(' ', '-')
+        epub_folder = self.ln.name.replace(' ', '-').replace('?', '').replace('!', '')
         if not isdir(epub_folder):
             mkdir(epub_folder)
 
@@ -381,7 +381,7 @@ class EpubEngine():
     def update_epub(self, ln, volume):
         epub_name = volume.name + '-' + ln.name + '.epub'
         epub_name = epub_name.replace(' ', '-')
-        epub_folder = ln.name.replace(' ', '-')
+        epub_folder = ln.name.replace(' ', '-').replace('?', '').replace('!', '')
         epub_path = epub_folder + '/' + epub_name
 
         try:
