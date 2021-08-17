@@ -211,6 +211,9 @@ class EpubEngine():
     def __init__(self):
         self.ln_info_json_file = 'ln_info.json'
 
+    def format_name(self, name):
+        return name.replace(' ', '-').replace('?', '').replace('!', '')
+
     def make_cover_image(self):
         try:
             print('Making cover image...')
@@ -354,11 +357,11 @@ class EpubEngine():
         self.book.add_item(epub.EpubNcx())
         self.book.add_item(epub.EpubNav())
 
-        epub_name = self.volume.name + '-' + self.ln.name + '.epub'
-        epub_name = epub_name.replace(' ', '-')
+        epub_name = self.format_name(
+            self.volume.name + '-' + self.ln.name + '.epub')
         self.set_metadata(epub_name, self.ln.author)
 
-        epub_folder = self.ln.name.replace(' ', '-').replace('?', '').replace('!', '')
+        epub_folder = self.format_name(self.ln.name)
         if not isdir(epub_folder):
             mkdir(epub_folder)
 
@@ -379,9 +382,8 @@ class EpubEngine():
         self.save_json(ln)
 
     def update_epub(self, ln, volume):
-        epub_name = volume.name + '-' + ln.name + '.epub'
-        epub_name = epub_name.replace(' ', '-')
-        epub_folder = ln.name.replace(' ', '-').replace('?', '').replace('!', '')
+        epub_name = self.format_name(volume.name + '-' + ln.name + '.epub')
+        epub_folder = self.format_name(ln.name)
         epub_path = epub_folder + '/' + epub_name
 
         try:
