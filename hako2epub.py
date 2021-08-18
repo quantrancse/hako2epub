@@ -1,5 +1,6 @@
 import argparse
 import json
+import re
 from io import BytesIO
 from os import mkdir
 from os.path import isdir, isfile
@@ -297,6 +298,10 @@ class EpubEngine():
                 chapter_content += self.make_image(
                     soup.find('div', id='chapter-content'), i + 1)
 
+                note_list = self.get_chapter_content_note(soup)
+                chapter_content = self.replace_chapter_content_note(
+                    chapter_content, note_list)
+
                 content = epub.EpubHtml(
                     uid=str(i + 1),
                     title=chapter_title,
@@ -312,11 +317,10 @@ class EpubEngine():
     def make_image(self, chapter_content, chapter_id):
         img_tags = chapter_content.findAll('img')
         img_urls = []
+        content = str(chapter_content)
         if img_tags:
             for img_tag in img_tags:
                 img_urls.append(img_tag.get('src'))
-
-            content = str(chapter_content)
             for i, img_url in enumerate(img_urls):
                 try:
                     img = Utils().get_image(img_url)
@@ -336,10 +340,23 @@ class EpubEngine():
                     content = content.replace(img_old_path, img_new_path)
                 except BaseException as e:  # NOSONAR
                     print('Error: Can not get chapter images! ' + img_url)
-        else:
-            content = str(chapter_content)
-
         return content
+
+    def get_chapter_content_note(self, soup):
+        raw_content = soup.find('div', id='chapter-content').text
+        note_tag_list = re.findall(r'\[note(.*?)\]', raw_content)
+        note_tag_list = ['[note' + note_id + ']' for note_id in note_tag_list]
+        note_reg_list = [
+            '(Note: ' + note.text + ')' for note in soup.findAll('span', 'note-content_real long-text')]
+        note_list = list(zip(note_tag_list, note_reg_list))
+        return note_list
+
+    def replace_chapter_content_note(self, chapter_content, note_list):
+        for note in note_list:
+            note_id = note[0]
+            note_print = note[1]
+            chapter_content = chapter_content.replace(note_id, note_print)
+        return chapter_content
 
     def bind_epub_book(self):
         intro_page = self.make_intro_page()
