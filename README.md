@@ -56,6 +56,7 @@ A tool to download light novels on [ln.hako.re](https://ln.hako.re) as the epub 
   * Update new volumes.
   * Update new chapters.
   * Update new chapters of a single volume.
+* Notes are shown directly in the light novel content.  
 * Working with [docln.net](https://docln.net/).
 
 <!-- GETTING STARTED -->
