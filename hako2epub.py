@@ -343,19 +343,18 @@ class EpubEngine():
         return content
 
     def get_chapter_content_note(self, soup):
-        raw_content = soup.find('div', id='chapter-content').text
-        note_tag_list = re.findall(r'\[note(.*?)\]', raw_content)
-        note_tag_list = ['[note' + note_id + ']' for note_id in note_tag_list]
-        note_reg_list = [
-            '(Note: ' + note.text + ')' for note in soup.findAll('span', 'note-content_real long-text')]
-        note_list = list(zip(note_tag_list, note_reg_list))
+        note_list = {}
+        note_div_list = soup.findAll('div', id=re.compile("^note"))
+        for div in note_div_list:
+            note_tag = '[' + div.get('id') + ']'
+            note_reg = '(Note: ' + div.text[10:] + ')'
+            note_list[note_tag] = note_reg
         return note_list
 
     def replace_chapter_content_note(self, chapter_content, note_list):
-        for note in note_list:
-            note_id = note[0]
-            note_print = note[1]
-            chapter_content = chapter_content.replace(note_id, note_print)
+        for note_tag in note_list.keys():
+            chapter_content = chapter_content.replace(
+                note_tag, note_list[note_tag])
         return chapter_content
 
     def bind_epub_book(self):
