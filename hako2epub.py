@@ -347,7 +347,8 @@ class EpubEngine():
         note_div_list = soup.findAll('div', id=re.compile("^note"))
         for div in note_div_list:
             note_tag = '[' + div.get('id') + ']'
-            note_reg = '(Note: ' + div.text[10:] + ')'
+            note_content = div.find('span', class_='note-content_real').text
+            note_reg = '(Note: ' + note_content + ')'
             note_list[note_tag] = note_reg
         return note_list
 
