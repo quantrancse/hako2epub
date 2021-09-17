@@ -2,18 +2,60 @@ import argparse
 import json
 import re
 from io import BytesIO
+from multiprocessing.dummy import Pool as ThreadPool
 from os import mkdir
-from os.path import isdir, isfile
+from os.path import isdir, isfile, join
 
+import questionary
 import requests
+import tqdm
 from bs4 import BeautifulSoup
 from ebooklib import epub
 from PIL import Image
 
+LINE_SIZE = 80
+THREAD_NUM = 8
 HEADERS = {
     'user-agent': ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.1916.47 Safari/537.36')}
 
+tool_version = '2.0.0'
 bs4_html_parser = 'html.parser'
+
+
+def print_format(name='', info='', info_style='bold fg:orange', prefix='! '):
+    questionary.print(prefix, style='bold fg:gray', end='')
+    questionary.print(name, style='bold fg:white', end='')
+    questionary.print(info, style=info_style)
+
+
+def check_for_tool_updates():
+    try:
+        release_api = 'https://api.github.com/repos/quantrancse/hako2epub/releases/latest'
+        response = requests.get(
+            release_api, headers=HEADERS, timeout=10).json()
+        latest_release = response['tag_name'][1:]
+        if tool_version != latest_release:
+            print_format('Current tool version: ',
+                         tool_version, info_style='bold fg:red')
+            print_format('Latest tool version: ', latest_release,
+                         info_style='bold fg:green')
+            print_format('Please upgrade the tool at: ',
+                         'https://github.com/quantrancse/hako2epub', info_style='bold fg:cyan')
+            print('-' * LINE_SIZE)
+    except Exception:
+        print('Something was wrong. Can not get the tool latest update!')
+
+
+class pcolors:
+    HEADER = '\033[95m'
+    OKORANGE = '\033[93m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
 
 class Utils():
@@ -29,13 +71,22 @@ class Utils():
     def format_text(self, text):
         return text.strip().replace('\n', '')
 
+    def format_name(self, name):
+        special_char = ['?', '!', '.', ':', '\\', '/', '<', '>', '|', '*']
+        for char in special_char:
+            name = name.replace(char, '')
+        name = name.replace(' ', '-')
+        if len(name) > 100:
+            name = name[:100]
+        return name
+
     def get_image(self, image_url):
         if 'imgur.com' in image_url and '.' not in image_url[-5:]:
             image_url += '.jpg'
         try:
             image = Image.open(requests.get(
                 image_url, headers=HEADERS, stream=True, timeout=10).raw).convert('RGB')
-        except BaseException as e:  # NOSONAR
+        except Exception:
             print("Can not get image: " + image_url)
         return image
 
@@ -49,52 +100,90 @@ class UpdateLN():
         try:
             if isfile(self.ln_info_json_file):
 
-                with open(self.ln_info_json_file, 'r', encoding='utf-8') as read_file:
-                    save_file = json.load(read_file)
+                with open(self.ln_info_json_file, 'r', encoding='utf-8') as readfile:
+                    save_file = json.load(readfile)
 
                 for old_ln in save_file.get('ln_list'):
-                    if ln_url == 'all' or ln_url == old_ln.get('ln_url'):
-                        self.check_update_ln(old_ln, mode)
+                    if ln_url == 'all':
+                        self.check_update_ln(old_ln)
+                    elif ln_url == old_ln.get('ln_url'):
+                        self.check_update_ln(old_ln, 'updatevol')
             else:
                 print('Can not find ln_info.json file!')
-        except BaseException as e:  # NOSONAR
+        except Exception:
             print('Error: Can not process ln_info.json!')
-            raise e
+            print('--------------------')
 
-    def check_update_ln(self, old_ln, mode):
-        print('Checking update: ' + old_ln.get('ln_name'))
+    def check_update_ln(self, old_ln, mode=''):
+        print_format('Checking update: ', old_ln.get('ln_name'))
         old_ln_url = old_ln.get('ln_url')
         try:
             request = requests.get(old_ln_url, headers=HEADERS, timeout=10)
             soup = BeautifulSoup(request.text, bs4_html_parser)
             new_ln = LNInfo()
-            new_ln = new_ln.get_ln_info(old_ln_url, soup, 'default')
+            new_ln = new_ln.get_ln_info(old_ln_url, soup, 'update')
 
             if mode == 'updatevol':
-                self.updatevol_ln(old_ln, new_ln)
+                self.update_volume_ln(old_ln, new_ln)
             else:
                 self.update_ln(old_ln, new_ln)
+            print(
+                f'Update {pcolors.OKORANGE}{old_ln.get("ln_name")}{pcolors.ENDC}: [{pcolors.OKGREEN} DONE {pcolors.ENDC}]')
+            print('--------------------')
+        except Exception:
+            print(
+                f'Update {old_ln.get("ln_name")}: [{pcolors.FAIL} FAIL {pcolors.ENDC}]')
+            print('Error: Can not check light novel info!')
+            print('--------------------')
 
-            print('Done...\n')
-        except BaseException as e:  # NOSONAR
-            print('Error: Can not check ln info!')
+    def update_volume_ln(self, old_ln, new_ln):
+        old_volume_list = [volume_item.get('vol_name')
+                           for volume_item in old_ln.get('vol_list')]
+        new_volume_list = [volume_item.name
+                           for volume_item in new_ln.volume_list]
 
-    def updatevol_ln(self, old_ln, new_ln):
-        volume_titles = [vol_item.get('vol_name')
-                         for vol_item in old_ln.get('vol_list')]
+        existed_prefix = 'Existed: '
+        new_prefix = 'New: '
 
-        print('Select a volume to update:\n')
-        for i, volume_title in enumerate(volume_titles):
-            print(str(i) + ': ' + volume_title + '\n')
+        volume_titles = [
+            existed_prefix + volume_name for volume_name in old_volume_list]
+        all_existed_volumes = 'All existed volumes (%s volumes)' % str(
+            len(old_volume_list))
 
-        try:
-            selected_volume = int(input('Enter volume number: '))
-            for volume in new_ln.volume_list:
-                if volume.name == old_ln.get('vol_list')[selected_volume].get('vol_name'):
-                    self.update_new_chapter(new_ln, volume, old_ln)
-        except BaseException as e:
-            print('Invalid input number.')
-            raise e
+        all_volumes = ''
+
+        if old_volume_list != new_volume_list:
+            new_volume_titles = [
+                new_prefix + volume_name for volume_name in new_volume_list if volume_name not in old_volume_list]
+            volume_titles += new_volume_titles
+            all_volumes = 'All volumes (%s volumes)' % str(len(volume_titles))
+            volume_titles.insert(0, all_existed_volumes)
+            volume_titles.insert(
+                0, questionary.Choice(all_volumes, checked=True))
+        else:
+            volume_titles.insert(0, questionary.Choice(
+                all_existed_volumes, checked=True))
+
+        selected_volumes = questionary.checkbox(
+            'Select volumes to update:', choices=volume_titles).ask()
+
+        if selected_volumes:
+            if all_volumes in selected_volumes:
+                self.update_ln(old_ln, new_ln)
+            elif all_existed_volumes in selected_volumes:
+                for volume in new_ln.volume_list:
+                    if volume.name in old_volume_list:
+                        self.update_new_chapter(new_ln, volume, old_ln)
+            else:
+                new_volumes_name = [
+                    volume[len(new_prefix):] for volume in selected_volumes if new_prefix in volume]
+                old_volumes_name = [
+                    volume[len(existed_prefix):] for volume in selected_volumes if existed_prefix in volume]
+                for volume in new_ln.volume_list:
+                    if volume.name in old_volumes_name:
+                        self.update_new_chapter(new_ln, volume, old_ln)
+                    elif volume.name in new_volumes_name:
+                        self.update_new_volume(new_ln, volume)
 
     def update_ln(self, old_ln, new_ln):
         old_ln_vol_list = [vol.get('vol_name')
@@ -107,28 +196,47 @@ class UpdateLN():
                 self.update_new_chapter(new_ln, volume, old_ln)
 
     def update_new_volume(self, new_ln, volume):
+        print_format('Updating volume: ', volume.name,
+                     info_style='bold fg:cyan')
         new_ln.volume_list = [volume]
         epub_engine = EpubEngine()
         epub_engine.create_epub(new_ln)
+        print(
+            f'Updating volume {pcolors.OKCYAN}{volume.name}{pcolors.ENDC}: [{pcolors.OKGREEN} DONE {pcolors.ENDC}]')
+        print('--------------------')
 
     def update_new_chapter(self, new_ln, volume, old_ln):
-        for vol in old_ln.get('vol_list'):
-            if volume.name == vol.get('vol_name'):
-                print('Checking volume: ' + volume.name)
-                volume_chapter_list = list(volume.chapter_list.keys())
-                for chapter in volume_chapter_list:
-                    if chapter in vol.get('chapter_list'):
+        print_format('Checking volume: ', volume.name,
+                     info_style='bold fg:cyan')
+        for old_volume in old_ln.get('vol_list'):
+            if volume.name == old_volume.get('vol_name'):
+
+                new_ln_chapter_list = list(volume.chapter_list.keys())
+                old_ln_chapter_list = old_volume.get('chapter_list')
+                volume_chapter_list = new_ln_chapter_list[new_ln_chapter_list.index(
+                    old_ln_chapter_list[0]):]
+
+                for chapter in new_ln_chapter_list:
+                    if chapter in old_ln_chapter_list or chapter not in volume_chapter_list:
                         volume.chapter_list.pop(chapter, None)
+
         if volume.chapter_list:
-            print('Updating volume: ' + volume.name)
+            print_format('Updating volume: ', volume.name,
+                         info_style='bold fg:cyan')
             epub_engine = EpubEngine()
             epub_engine.update_epub(new_ln, volume)
+            print(
+                f'Updating {pcolors.OKCYAN}{volume.name}{pcolors.ENDC}: [{pcolors.OKGREEN} DONE {pcolors.ENDC}]')
+
+        print(
+            f'Checking volume {pcolors.OKCYAN}{volume.name}{pcolors.ENDC}: [{pcolors.OKGREEN} DONE {pcolors.ENDC}]')
+        print('--------------------')
 
     def update_json(self, ln):  # NOSONAR
         try:
-            print('Updating ln_info.json...')
-            with open(self.ln_info_json_file, 'r', encoding='utf-8') as read_file:
-                save_file = json.load(read_file)
+            print('Updating ln_info.json...', end='\r')
+            with open(self.ln_info_json_file, 'r', encoding='utf-8') as readfile:
+                save_file = json.load(readfile)
 
             ln_url_list = [ln_item.get('ln_url')
                            for ln_item in save_file.get('ln_list')]
@@ -174,13 +282,20 @@ class UpdateLN():
 
             with open(self.ln_info_json_file, 'w', encoding='utf-8') as outfile:
                 json.dump(save_file, outfile, indent=4, ensure_ascii=False)
-        except BaseException as e:
+
+            print(
+                f'Updating ln_info.json: [{pcolors.OKGREEN} DONE {pcolors.ENDC}]')
+            print('--------------------')
+
+        except Exception:
+            print(
+                f'Updating ln_info.json: [{pcolors.FAIL} FAIL {pcolors.ENDC}]')
             print('Error: Can not update ln_info.json!')
-            raise e
+            print('--------------------')
 
     def create_json(self, ln):
         try:
-            print('Creating ln_info.json...')
+            print('Creating ln_info.json...', end='\r')
             ln_list = {}
             current_ln = {}
 
@@ -202,9 +317,15 @@ class UpdateLN():
 
             with open(self.ln_info_json_file, 'w', encoding='utf-8') as outfile:
                 json.dump(ln_list, outfile, indent=4, ensure_ascii=False)
-        except BaseException as e:
+
+            print(
+                f'Creating ln_info.json: [{pcolors.OKGREEN} DONE {pcolors.ENDC}]')
+            print('--------------------')
+        except Exception:
+            print(
+                f'Creating ln_info.json: [{pcolors.FAIL} FAIL {pcolors.ENDC}]')
             print('Error: Can not create ln_info.json!')
-            raise e
+            print('--------------------')
 
 
 class EpubEngine():
@@ -212,21 +333,22 @@ class EpubEngine():
     def __init__(self):
         self.ln_info_json_file = 'ln_info.json'
 
-    def format_name(self, name):
-        return name.replace(' ', '-').replace('?', '').replace('!', '')
-
     def make_cover_image(self):
         try:
-            print('Making cover image...')
+            print('Making cover image...', end='\r')
             img = Utils().get_image(self.volume.cover_img)
             b = BytesIO()
             img.save(b, 'jpeg')
             b_img = b.getvalue()
             cover_image = epub.EpubItem(
                 file_name='cover_image.jpeg', media_type='image/jpeg', content=b_img)
+            print(
+                f'Making cover image: [{pcolors.OKGREEN} DONE {pcolors.ENDC}]')
             return cover_image
-        except BaseException as e:  # NOSONAR
+        except Exception:
+            print(f'Making cover image: [{pcolors.FAIL} FAIL {pcolors.ENDC}]')
             print('Error: Can not get cover image!')
+            print('--------------------')
             return None
 
     def set_metadata(self, title, author, lang='vi'):
@@ -235,7 +357,7 @@ class EpubEngine():
         self.book.add_author(author)
 
     def make_intro_page(self):
-        print('Making intro page...')
+        print('Making intro page...', end='\r')
         source_url = self.volume.url
         github_url = 'https://github.com/quantrancse/hako2epub'
 
@@ -274,6 +396,8 @@ class EpubEngine():
             <i>Generated by <b><a href="%s">hako2epub</a></b></i>
         </div>''' % (source_url, source_url, github_url)
 
+        print(f'Making intro page: [{pcolors.OKGREEN} DONE {pcolors.ENDC}]')
+
         return epub.EpubHtml(
             uid='intro',
             file_name='intro.xhtml',
@@ -282,37 +406,62 @@ class EpubEngine():
         )
 
     def make_chapter(self, i=0):
+        chapter_urls_index = []
+        for i, chapter in enumerate(self.volume.chapter_list.keys(), i):
+            chapter_urls_index.append((i, self.volume.chapter_list[chapter]))
+
+        pool = ThreadPool(THREAD_NUM)
+        contents = []
         try:
-            print('Making chapter contents...')
-            for i, chapter in enumerate(self.volume.chapter_list.keys(), i):
-                chapter_url = self.volume.chapter_list[chapter]
-                request = requests.get(
-                    chapter_url, headers=HEADERS, timeout=10)
-                soup = BeautifulSoup(request.text, bs4_html_parser)
+            contents = list(tqdm.tqdm(pool.imap_unordered(self.make_chapter_content, chapter_urls_index), total=len(
+                chapter_urls_index), desc='Making chapter contents: '))
+            contents.sort(key=lambda x: x[0])
+            contents = [content[1] for content in contents]
+        except Exception:
+            pass
+        pool.close()
+        pool.join()
 
-                xhtml_file = 'chap_%s.xhtml' % str(i + 1)
+        for content in contents:
+            self.book.add_item(content)
+            self.book.spine.append(content)
+            self.book.toc.append(content)
 
-                chapter_title = soup.find('div', 'title-top').find('h4').text
-                chapter_content = '''<h4 align='center'> %s </h4>''' % (
-                    chapter_title)
-                chapter_content += self.make_image(
-                    soup.find('div', id='chapter-content'), i + 1)
+    def make_chapter_content(self, chapter_list):
+        try:
+            i = chapter_list[0]
+            chapter_url = chapter_list[1]
 
-                note_list = self.get_chapter_content_note(soup)
-                chapter_content = self.replace_chapter_content_note(
-                    chapter_content, note_list)
+            request = requests.get(
+                chapter_url, headers=HEADERS, timeout=10)
+            soup = BeautifulSoup(request.text, bs4_html_parser)
 
-                content = epub.EpubHtml(
-                    uid=str(i + 1),
-                    title=chapter_title,
-                    file_name=xhtml_file,
-                    content=chapter_content
-                )
-                self.book.add_item(content)
-                self.book.spine.append(content)
-                self.book.toc.append(content)
-        except BaseException as e:  # NOSONAR
-            print('Error: Can not get chapter content!')
+            xhtml_file = 'chap_%s.xhtml' % str(i + 1)
+
+            chapter_title = soup.find('div', 'title-top').find('h4').text
+            chapter_content = '''<h4 align='center'> %s </h4>''' % (
+                chapter_title)
+            chapter_content += self.make_image(
+                soup.find('div', id='chapter-content'), i + 1)
+
+            note_list = self.get_chapter_content_note(soup)
+            chapter_content = self.replace_chapter_content_note(
+                chapter_content, note_list)
+
+            content = epub.EpubHtml(
+                uid=str(i + 1),
+                title=chapter_title,
+                file_name=xhtml_file,
+                content=chapter_content
+            )
+
+            return (i, content)
+
+        except Exception:
+            print(
+                f'Making chapter contents: [{pcolors.FAIL} FAIL {pcolors.ENDC}]')
+            print('Error: Can not get chapter contents! ' + chapter_url)
+            print('--------------------')
 
     def make_image(self, chapter_content, chapter_id):
         img_tags = chapter_content.findAll('img')
@@ -338,8 +487,9 @@ class EpubEngine():
                     img_old_path = 'src="' + img_url
                     img_new_path = 'style="display: block;margin-left: auto;margin-right: auto;" src="' + img_path
                     content = content.replace(img_old_path, img_new_path)
-                except BaseException as e:  # NOSONAR
+                except Exception:
                     print('Error: Can not get chapter images! ' + img_url)
+                    print('--------------------')
         return content
 
     def get_chapter_content_note(self, soup):
@@ -365,8 +515,9 @@ class EpubEngine():
         try:
             self.book.set_cover('cover.jpeg', requests.get(
                 self.volume.cover_img, headers=HEADERS, stream=True, timeout=10).content)
-        except BaseException as e:  # NOSONAR
+        except Exception:
             print('Error: Can not set cover image!')
+            print('--------------------')
 
         self.book.spine = ['cover', intro_page, 'nav']
 
@@ -374,42 +525,47 @@ class EpubEngine():
         self.book.add_item(epub.EpubNcx())
         self.book.add_item(epub.EpubNav())
 
-        epub_name = self.format_name(
-            self.volume.name + '-' + self.ln.name + '.epub')
+        epub_name = Utils().format_name(self.volume.name + '-' + self.ln.name) + '.epub'
         self.set_metadata(epub_name, self.ln.author)
 
-        epub_folder = self.format_name(self.ln.name)
+        epub_folder = Utils().format_name(self.ln.name)
         if not isdir(epub_folder):
             mkdir(epub_folder)
 
-        epub_path = epub_folder + '/' + epub_name
+        epub_path = join(epub_folder, epub_name)
+
         try:
             epub.write_epub(epub_path, self.book, {})
-        except BaseException as e:  # NOSONAR
+        except Exception:
             print('Error: Can not write epub file!')
+            print('--------------------')
 
     def create_epub(self, ln):
         self.ln = ln
         for volume in ln.volume_list:
-            print('Processing volume: ' + volume.name)
+            print_format('Processing volume: ', volume.name,
+                         info_style='bold fg:cyan')
             self.book = epub.EpubBook()
             self.volume = volume
             self.bind_epub_book()
-            print('Done volume: ' + volume.name + '\n')
+            print(
+                f'Processing {pcolors.OKCYAN}{volume.name}{pcolors.ENDC}: [{pcolors.OKGREEN} DONE {pcolors.ENDC}]')
+            print('--------------------')
         self.save_json(ln)
 
     def update_epub(self, ln, volume):
-        epub_name = self.format_name(volume.name + '-' + ln.name + '.epub')
-        epub_folder = self.format_name(ln.name)
+        epub_name = Utils().format_name(volume.name + '-' + ln.name) + '.epub'
+        epub_folder = Utils().format_name(ln.name)
         epub_path = epub_folder + '/' + epub_name
 
         try:
             self.book = epub.read_epub(epub_path)
-        except BaseException as e:  # NOSONAR
+        except Exception:
             print('Error: Can not read epub file!')
+            print('--------------------')
 
         chap_name_list = [chap.file_name for chap in self.book.get_items(
-        )if chap.file_name.startswith('chap')]
+        ) if chap.file_name.startswith('chap')]
 
         self.ln = ln
         self.volume = volume
@@ -423,8 +579,9 @@ class EpubEngine():
 
         try:
             epub.write_epub(epub_path, self.book, {})
-        except BaseException as e:  # NOSONAR
+        except Exception:
             print('Error: Can not write epub file!')
+            print('--------------------')
 
         self.save_json(ln)
 
@@ -487,8 +644,7 @@ class LNInfo():
         self.get_ln_info(ln_url, soup, mode)
         self.create_ln_epub()
 
-    def get_ln_info(self, ln_url, soup, mode):
-        print('Getting LN Info...\n')
+    def get_ln_info(self, ln_url, soup, mode=''):
         self.set_ln_url(ln_url)
         self.set_ln_name(soup)
         self.set_ln_series_info(soup)
@@ -526,10 +682,15 @@ class LNInfo():
     def set_ln_fact_item(self, soup):
         self.fact_item = str(soup.find('div', 'fact-item'))
 
-    def set_ln_volume(self, soup, mode):
+    def set_ln_volume(self, soup, mode=''):
 
         get_volume_section = soup.findAll('section', 'volume-list')
         self.num_vol = len(get_volume_section)
+
+        volume_titles = []
+        for volume_section in get_volume_section:
+            volume_titles.append(Utils().format_text(
+                volume_section.find('span', 'sect-title').text))
 
         volume_urls = []
         for volume_section in get_volume_section:
@@ -537,50 +698,102 @@ class LNInfo():
                 'div', 'volume-cover').find('a').get('href'))
             volume_urls.append(volume_url)
 
-        try:
-            if mode == 'default':
-                for volume_url in volume_urls:
-                    request = requests.get(
-                        volume_url, headers=HEADERS, timeout=10)
-                    soup = BeautifulSoup(request.text, bs4_html_parser)
+        volume_info = dict(zip(volume_titles, volume_urls))
 
-                    self.volume_list.append(Volume(volume_url, soup))
+        if mode == 'update':
+            self.set_ln_volume_list(volume_info.values())
+        elif mode == 'chapter':
+            print_format('Novel: ', self.name)
+            selected_volume = questionary.select(
+                'Select volumes to download:', choices=volume_titles, use_shortcuts=True).ask()
+            self.set_ln_volume_list([volume_info[selected_volume]])
+            self.set_ln_volume_chapter_list()
+        else:
+            print_format('Novel: ', self.name)
+            all_volumes = 'All volumes (%s volumes)' % str(self.num_vol)
+            volume_titles.insert(
+                0, questionary.Choice(all_volumes, checked=True))
 
-            elif mode == 'volume':
-                get_volume_section = soup.findAll('section', 'volume-list')
-                volume_titles = []
+            selected_volumes = questionary.checkbox(
+                'Select volumes to download:', choices=volume_titles).ask()
 
-                for volume_section in get_volume_section:
-                    volume_titles.append(Utils().format_text(volume_section.find(
-                        'span', 'sect-title').text).replace(':', ''))
+            if all_volumes in selected_volumes:
+                self.set_ln_volume_list(volume_info.values())
+            elif selected_volumes:
+                self.set_ln_volume_list(
+                    [volume_info[volume_title] for volume_title in selected_volumes])
 
-                print('Select a volume:\n')
-                for i, volume_title in enumerate(volume_titles):
-                    print(str(i) + ': ' + volume_title + '\n')
+    def set_ln_volume_chapter_list(self):
+        chapter_name_list = list(self.volume_list[0].chapter_list.keys())
+        from_chapter = questionary.text('Enter from chapter name:').ask()
+        end_chapter = questionary.text('Enter to chapter name:').ask()
 
-                try:
-                    selected_volume = int(input('Enter volume number: '))
-                    print('\n')
-                except BaseException as e:
-                    print('Invalid volume number.')
-                    raise e
+        if from_chapter not in chapter_name_list or end_chapter not in chapter_name_list:
+            print('Invalid input chapter!')
+            self.volume_list = []
+        else:
+            from_chapter_index = chapter_name_list.index(from_chapter)
+            end_chapter_index = chapter_name_list.index(end_chapter)
+            if end_chapter_index < from_chapter_index:
+                from_chapter_index, end_chapter_index = end_chapter_index, from_chapter_index
 
-                if selected_volume in range(len(volume_urls)):
-                    request = requests.get(
-                        volume_urls[selected_volume], headers=HEADERS, timeout=10)
-                    soup = BeautifulSoup(request.text, bs4_html_parser)
+            selected_chapters = chapter_name_list[from_chapter_index:end_chapter_index+1]
+            self.volume_list[0].chapter_list = {
+                chapter_name: self.volume_list[0].chapter_list[chapter_name] for chapter_name in selected_chapters}
 
-                    self.volume_list.append(
-                        Volume(volume_urls[selected_volume], soup))
-
-        except BaseException as e:  # NOSONAR
-            print('Error: Can not get volume info!')
+    def set_ln_volume_list(self, volume_urls):
+        for volume_url in volume_urls:
+            try:
+                request = requests.get(volume_url, headers=HEADERS, timeout=10)
+                soup = BeautifulSoup(request.text, bs4_html_parser)
+                self.volume_list.append(Volume(volume_url, soup))
+            except Exception:
+                print('Error: Can not get volume info!' + volume_url)
+                print('--------------------')
 
 
 class Engine():
     def __init__(self):
         super().__init__()
         self.current_ln = LNInfo()
+        self.ln_info_json_file = 'ln_info.json'
+
+    def update_current_json(self):  # NOSONAR
+        try:
+            if isfile(self.ln_info_json_file):
+                with open(self.ln_info_json_file, 'r', encoding='utf-8') as readfile:
+                    current_json = json.load(readfile)
+
+                new_json = current_json
+
+                for old_ln in current_json.get('ln_list'):
+                    ln_name = old_ln.get('ln_name')
+                    epub_folder = Utils().format_name(ln_name)
+                    if not isdir(epub_folder):
+                        new_json['ln_list'] = [ln for ln in current_json.get(
+                            'ln_list') if ln.get('ln_name') != ln_name]
+                    else:
+                        new_vol_list = old_ln.get('vol_list')
+                        for current_vol in old_ln.get('vol_list'):
+                            current_vol_name = current_vol.get('vol_name')
+                            epub_name = Utils().format_name(current_vol_name + '-' + ln_name) + '.epub'
+                            epub_path = join(epub_folder, epub_name)
+                            if not isfile(epub_path):
+                                new_vol_list = [vol for vol in new_vol_list if vol.get(
+                                    'vol_name') != current_vol_name]
+                            for ln in new_json['ln_list']:
+                                if old_ln.get('ln_url') == ln.get('ln_url'):
+                                    ln['vol_list'] = new_vol_list
+
+                with open(self.ln_info_json_file, 'w', encoding='utf-8') as outfile:
+                    json.dump(new_json, outfile, indent=4, ensure_ascii=False)
+
+                readfile.close()
+                outfile.close()
+
+        except Exception:
+            print('Error: Can not process ln_info.json!')
+            print('--------------------')
 
     def check_valid_url(self, url):
         if not any(substr in url for substr in ['ln.hako.re/truyen/', 'docln.net/truyen/']):
@@ -590,11 +803,10 @@ class Engine():
             return True
 
     def start(self, ln_url, mode):
+        self.update_current_json()
         if ln_url and self.check_valid_url(ln_url):
             if mode == 'update':
                 UpdateLN().check_update(ln_url)
-            elif mode == 'updatevol':
-                UpdateLN().check_update(ln_url, 'updatevol')
             else:
                 try:
                     request = requests.get(ln_url, headers=HEADERS, timeout=10)
@@ -603,32 +815,35 @@ class Engine():
                         print('Invalid url. Please try again.')
                     else:
                         self.current_ln.get_ln(ln_url, soup, mode)
-                except BaseException as e:
-                    print('Error: Can not check url!')
-                    raise e
-        else:
+                except Exception:
+                    print('Error: Can not check light novel url!')
+                    print('--------------------')
+        elif mode == 'update_all':
             UpdateLN().check_update()
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description='A tool to download light novels on https://ln.hako.re as the epub file format for offline reading.')
+    parser.add_argument('-v', '--version', action='version', version='hako2epub v%s' % tool_version)
     parser.add_argument('ln_url', type=str, nargs='?', default='',
-                        help='url to the ln homepage')
-    parser.add_argument('-v', '--volume', metavar='ln_url', type=str,
-                        help='download single volume')
+                        help='url to the light novel page')
+    parser.add_argument('-c', '--chapter', type=str, metavar='ln_url',
+                        help='download specific chapters of a light novel')
     parser.add_argument('-u', '--update', type=str, metavar='ln_url', nargs='?', default=argparse.SUPPRESS,
-                        help='update all/single ln')
-    parser.add_argument('-uv', '--updatevol', type=str, metavar='ln_url',
-                        help='update single volume')
+                        help='update all/single light novel')
     args = parser.parse_args()
 
     engine = Engine()
+    
+    check_for_tool_updates()
 
-    if args.volume:
-        engine.start(args.volume, 'volume')
-    elif args.updatevol:
-        engine.start(args.updatevol, 'updatevol')
+    if args.chapter:
+        engine.start(args.chapter, 'chapter')
     elif 'update' in args:
-        engine.start(args.update, 'update')
+        if args.update:
+            engine.start(args.update, 'update')
+        else:
+            engine.start(None, 'update_all')
     else:
         engine.start(args.ln_url, 'default')

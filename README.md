@@ -45,88 +45,91 @@ A tool to download light novels on [ln.hako.re](https://ln.hako.re) as the epub 
 
 **_Notes:_**
 * _This tool is a personal standalone project, it does not have any related to [ln.hako.re](https://ln.hako.re) administrators._
-* _If possible, please support the website, original light novel, and light novel translation authors._
+* _If possible, please support the original light novel, hako website, and light novel translation authors._
 * _This tool is for non-commercial purpose only._
 
 ### Features
+* Working with [docln.net](https://docln.net/).
 * Support images.
 * Support navigation and table of contents.
+* Notes are shown directly in the light novel content.
 * Download all/single volume of a light novel.
+* Download specific chapters of a light novel.
 * Update all/single downloaded light novel.
   * Update new volumes.
   * Update new chapters.
-  * Update new chapters of a single volume.
-* Notes are shown directly in the light novel content.  
-* Working with [docln.net](https://docln.net/).
+* Support multiprocessing to speed up.
+* Auto get current downloaded light novel in the directory.
+* Auto checking the new tool version.
 
 <!-- GETTING STARTED -->
 ## Getting Started
 
-For normal user, there is a single execution file [here](https://github.com/quantrancse/hako2epub/releases). Run and follow the instructions.
+For normal user, download the execution file below. Run and follow the instructions.
+
+**Windows**: [hako2epub.exe ~ 14MB]()
 
 ### Prerequisites
 
-* python 3.6.8
+* python 3.9.6
 * ebooklib
+* requests
 * bs4
 * pillow
+* tqdm
+* questionary
 * argparse
 ```sh
-pip install ebooklib bs4 pillow argparse
+pip install ebooklib requests bs4 pillow argparse tqdm questionary
 ```
-**_Notes:_** _I only tested on python 3.6.8_
 
 ### Usage
-```bash
-usage: hako2epub.py [-h] [-v ln_url] [-u [ln_url]] [-uv ln_url] [ln_url]
+```text
+usage: hako2epub.py [-h] [-c ln_url] [-u [ln_url]] [ln_url]
+
+A tool to download light novels on https://ln.hako.re as the epub file format for offline reading.
 
 positional arguments:
-  ln_url                url to the ln homepage
+  ln_url                url to the light novel page
 
 optional arguments:
   -h, --help            show this help message and exit
-  -v ln_url, --volume ln_url
-                        download single volume
+  -c ln_url, --chapter ln_url
+                        download specific chapters of a light novel
   -u [ln_url], --update [ln_url]
-                        update all/single ln
-  -uv ln_url, --updatevol ln_url
-                        update single volume
+                        update all/single light novel
 ```
 * Download a light novel
 ```sh
 python hako2epub.py light_novel_url
 ```
-* Download a single volume in a light novel
+* Download specific chapters of light novel
 ```sh
-python hako2epub.py -v light_novel_url
+python hako2epub.py -c light_novel_url
 ```
-* Update all light novels
+* Update all downloaded light novels
 ```sh
 python hako2epub.py -u
 ```
-* Update a single light novel
+* Update a single downloaded light novel
 ```sh
 python hako2epub.py -u light_novel_url
-```
-* Update a single volume in a light novel
-```sh
-python hako2epub.py -uv light_novel_url
 ```
 ### Notes
 * Light novel will be downloaded into the same folder as the program.
 * Downloaded information will be saved into `ln_info.json` file located in the same folder as the program.
-* If you change anything (like move the epub files away), try to change the `ln_info.json` too.
-* Or try not to change anything ^^
+* If you download specific chapters of a light novel, please enter the full name of the chapter in the "from ... to ..." prompt.
+* If you update the volume which contains specific chapters, only new chapters after the current latest chapter will be added.
+* Try to keep the program and `ln_info.json` file at the same folder with your downloaded light novels for efficiently management.
 
 ## Screenshots
-![Demo](images/exec_demo.png)
+![Demo](images/demo.png)
 
 <!-- ISSUES -->
 ## Issues
 
 * I only tested on some of my favorite light novels.
-* Images may crash on some epub readers.
-* Sometime can not get image from some image hosts.
+* Sometime can not get images from some image hosts.
 
 <!-- CONTRIBUTING -->
 ## Contributing
@@ -147,13 +150,13 @@ Distributed under the MIT License. See [LICENSE][license-url] for more informati
 <!-- CONTACT -->
 ## Contact
 
-* **Author** - [@quantrancse](https://www.facebook.com/quantrancse)
+* **Author** - [@quantrancse](https://quantrancse.github.io)
 
 <!-- ACKNOWLEDGEMENTS -->
 ## Acknowledgements
 * [EbookLib](https://github.com/aerkalov/ebooklib)
 
 <!-- MARKDOWN LINKS & IMAGES -->
-[python-shield]: https://img.shields.io/badge/python-3.6.8-brightgreen?style=flat-square
-[license-shield]: https://img.shields.io/github/license/quantrancse/nettruyen-downloader?style=flat-square
+[python-shield]: https://img.shields.io/badge/python-3.9.6-brightgreen?style=flat-square
+[license-shield]: https://img.shields.io/github/license/quantrancse/hako2epub?style=flat-square
 [license-url]: https://github.com/quantrancse/hako2epub/blob/master/LICENSE
