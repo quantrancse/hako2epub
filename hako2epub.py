@@ -824,7 +824,7 @@ class Engine():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='A tool to download light novels on https://ln.hako.re as the epub file format for offline reading.')
+        description='A tool to download light novels from https://ln.hako.re in epub file format for offline reading.')
     parser.add_argument('-v', '--version', action='version', version='hako2epub v%s' % tool_version)
     parser.add_argument('ln_url', type=str, nargs='?', default='',
                         help='url to the light novel page')

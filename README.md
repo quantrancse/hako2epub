@@ -10,7 +10,7 @@
   <h2 align="center">hako2epub</h2>
 
   <p align="center">
-    A tool to download light novel on <a href=https://ln.hako.re/>ln.hako.re</a> as epub file format
+    A tool to download light novels from <a href=https://ln.hako.re/>ln.hako.re</a> in epub file format for offline reading.
     <br />
     <br />
     <a href="https://rebrand.ly/hako2epub">Download</a>
@@ -41,7 +41,7 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-A tool to download light novels on [ln.hako.re](https://ln.hako.re) as the epub file format for offline reading.
+A tool to download light novels from [ln.hako.re](https://ln.hako.re) in epub file format for offline reading.
 
 **_Notes:_**
 * _This tool is a personal standalone project, it does not have any related to [ln.hako.re](https://ln.hako.re) administrators._
