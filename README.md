@@ -87,7 +87,7 @@ pip install ebooklib requests bs4 pillow argparse tqdm questionary
 ```text
 usage: hako2epub.py [-h] [-c ln_url] [-u [ln_url]] [ln_url]
 
-A tool to download light novels on https://ln.hako.re as the epub file format for offline reading.
+A tool to download light novels from https://ln.hako.re in epub file format for offline reading.
 
 positional arguments:
   ln_url                url to the light novel page
