@@ -87,7 +87,7 @@ class Utils():
             image = Image.open(requests.get(
                 image_url, headers=HEADERS, stream=True, timeout=10).raw).convert('RGB')
         except Exception:
-            print("Can not get image: " + image_url)
+            print('Can not get image: ' + image_url)
         return image
 
 
@@ -128,7 +128,7 @@ class UpdateLN():
             else:
                 self.update_ln(old_ln, new_ln)
             print(
-                f'Update {pcolors.OKORANGE}{old_ln.get("ln_name")}{pcolors.ENDC}: [{pcolors.OKGREEN} DONE {pcolors.ENDC}]')
+                f'Update {pcolors.OKCYAN}{old_ln.get("ln_name")}{pcolors.ENDC}: [{pcolors.OKGREEN} DONE {pcolors.ENDC}]')
             print('--------------------')
         except Exception:
             print(
@@ -213,8 +213,12 @@ class UpdateLN():
 
                 new_ln_chapter_list = list(volume.chapter_list.keys())
                 old_ln_chapter_list = old_volume.get('chapter_list')
-                volume_chapter_list = new_ln_chapter_list[new_ln_chapter_list.index(
-                    old_ln_chapter_list[0]):]
+                volume_chapter_list = []
+                for i in range(len(old_ln_chapter_list)):
+                    if old_ln_chapter_list[i] in new_ln_chapter_list:
+                        volume_chapter_list = new_ln_chapter_list[new_ln_chapter_list.index(
+                            old_ln_chapter_list[i]):]
+                        break
 
                 for chapter in new_ln_chapter_list:
                     if chapter in old_ln_chapter_list or chapter not in volume_chapter_list:
@@ -825,7 +829,8 @@ class Engine():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='A tool to download light novels from https://ln.hako.re in epub file format for offline reading.')
-    parser.add_argument('-v', '--version', action='version', version='hako2epub v%s' % tool_version)
+    parser.add_argument('-v', '--version', action='version',
+                        version='hako2epub v%s' % tool_version)
     parser.add_argument('ln_url', type=str, nargs='?', default='',
                         help='url to the light novel page')
     parser.add_argument('-c', '--chapter', type=str, metavar='ln_url',
@@ -835,7 +840,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     engine = Engine()
-    
+
     check_for_tool_updates()
 
     if args.chapter:
