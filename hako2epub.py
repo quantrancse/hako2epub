@@ -265,6 +265,8 @@ class UpdateLN():
             else:
                 for i, ln_item in enumerate(save_file.get('ln_list')):
                     if ln.url == ln_item.get('ln_url'):
+                        if ln.name != ln_item.get('ln_name'):
+                            save_file['ln_list'][i]['ln_name'] = ln.name
                         ln_item_vol_list = [old_ln_vol.get(
                             'vol_name') for old_ln_vol in ln_item.get('vol_list')]
                         for ln_vol in ln.volume_list:
@@ -562,32 +564,37 @@ class EpubEngine():
         epub_folder = Utils().format_name(ln.name)
         epub_path = epub_folder + '/' + epub_name
 
-        try:
-            self.book = epub.read_epub(epub_path)
-        except Exception:
-            print('Error: Can not read epub file!')
-            print('--------------------')
+        if isdir(epub_path):
+            try:
+                self.book = epub.read_epub(epub_path)
+            except Exception:
+                print('Error: Can not read epub file!')
+                print('--------------------')
 
-        chap_name_list = [chap.file_name for chap in self.book.get_items(
-        ) if chap.file_name.startswith('chap')]
+            chap_name_list = [chap.file_name for chap in self.book.get_items(
+            ) if chap.file_name.startswith('chap')]
 
-        self.ln = ln
-        self.volume = volume
-        self.make_chapter(len(chap_name_list))
+            self.ln = ln
+            self.volume = volume
+            self.make_chapter(len(chap_name_list))
 
-        for x in self.book.items:
-            if x.file_name == 'toc.ncx':
-                self.book.items.remove(x)
+            for x in self.book.items:
+                if x.file_name == 'toc.ncx':
+                    self.book.items.remove(x)
 
-        self.book.add_item(epub.EpubNcx())
+            self.book.add_item(epub.EpubNcx())
 
-        try:
-            epub.write_epub(epub_path, self.book, {})
-        except Exception:
-            print('Error: Can not write epub file!')
-            print('--------------------')
+            try:
+                epub.write_epub(epub_path, self.book, {})
+            except Exception:
+                print('Error: Can not write epub file!')
+                print('--------------------')
 
-        self.save_json(ln)
+            self.save_json(ln)
+        else:
+            print('Can not find the old light novel path!')
+            print('Creating the new one...')
+            self.create_epub(ln)
 
     def save_json(self, ln):
         if isfile(self.ln_info_json_file):
