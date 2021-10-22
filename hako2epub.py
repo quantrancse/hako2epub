@@ -564,7 +564,7 @@ class EpubEngine():
         epub_folder = Utils().format_name(ln.name)
         epub_path = epub_folder + '/' + epub_name
 
-        if isdir(epub_path):
+        if isfile(epub_path):
             try:
                 self.book = epub.read_epub(epub_path)
             except Exception:
