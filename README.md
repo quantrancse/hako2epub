@@ -130,6 +130,7 @@ python hako2epub.py -u light_novel_url
 
 * I only tested on some of my favorite light novels.
 * Sometime can not get images from some image hosts.
+* Sometimes it will take a long time to download or update the light novels (maybe only the first light novel in the list). Most cases are under 10 seconds. If you are over that time, you should use a VPN (1.1.1.1 Cloudflare WARP) to avoid this.
 * If you update the light novel that was renamed, it will download the whole light novel again. To avoid this, please manually rename the path of the epub file to the new light novel name exactly like the current name format. Also rename the light novel in the `ln_info.json` file.
 
 <!-- CONTRIBUTING -->

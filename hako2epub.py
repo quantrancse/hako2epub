@@ -18,8 +18,9 @@ THREAD_NUM = 8
 HEADERS = {
     'user-agent': ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.1916.47 Safari/537.36')}
 
-tool_version = '2.0.1'
+tool_version = '2.0.2'
 bs4_html_parser = 'html.parser'
+ln_request = requests.Session()
 
 
 def print_format(name='', info='', info_style='bold fg:orange', prefix='! '):
@@ -32,7 +33,7 @@ def check_for_tool_updates():
     try:
         release_api = 'https://api.github.com/repos/quantrancse/hako2epub/releases/latest'
         response = requests.get(
-            release_api, headers=HEADERS, timeout=10).json()
+            release_api, headers=HEADERS, timeout=5).json()
         latest_release = response['tag_name'][1:]
         if tool_version != latest_release:
             print_format('Current tool version: ',
@@ -84,8 +85,8 @@ class Utils():
         if 'imgur.com' in image_url and '.' not in image_url[-5:]:
             image_url += '.jpg'
         try:
-            image = Image.open(requests.get(
-                image_url, headers=HEADERS, stream=True, timeout=10).raw).convert('RGB')
+            image = Image.open(ln_request.get(
+                image_url, headers=HEADERS, stream=True, timeout=5).raw).convert('RGB')
         except Exception:
             print('Can not get image: ' + image_url)
         return image
@@ -118,7 +119,7 @@ class UpdateLN():
         print_format('Checking update: ', old_ln.get('ln_name'))
         old_ln_url = old_ln.get('ln_url')
         try:
-            request = requests.get(old_ln_url, headers=HEADERS, timeout=10)
+            request = ln_request.get(old_ln_url, headers=HEADERS, timeout=5)
             soup = BeautifulSoup(request.text, bs4_html_parser)
             new_ln = LNInfo()
             new_ln = new_ln.get_ln_info(old_ln_url, soup, 'update')
@@ -438,8 +439,8 @@ class EpubEngine():
             i = chapter_list[0]
             chapter_url = chapter_list[1]
 
-            request = requests.get(
-                chapter_url, headers=HEADERS, timeout=10)
+            request = ln_request.get(
+                chapter_url, headers=HEADERS, timeout=5)
             soup = BeautifulSoup(request.text, bs4_html_parser)
 
             xhtml_file = 'chap_%s.xhtml' % str(i + 1)
@@ -519,8 +520,8 @@ class EpubEngine():
         self.book.add_item(intro_page)
 
         try:
-            self.book.set_cover('cover.jpeg', requests.get(
-                self.volume.cover_img, headers=HEADERS, stream=True, timeout=10).content)
+            self.book.set_cover('cover.jpeg', ln_request.get(
+                self.volume.cover_img, headers=HEADERS, stream=True, timeout=5).content)
         except Exception:
             print('Error: Can not set cover image!')
             print('--------------------')
@@ -755,7 +756,8 @@ class LNInfo():
     def set_ln_volume_list(self, volume_urls):
         for volume_url in volume_urls:
             try:
-                request = requests.get(volume_url, headers=HEADERS, timeout=10)
+                request = ln_request.get(
+                    volume_url, headers=HEADERS, timeout=5)
                 soup = BeautifulSoup(request.text, bs4_html_parser)
                 self.volume_list.append(Volume(volume_url, soup))
             except Exception:
@@ -820,7 +822,8 @@ class Engine():
                 UpdateLN().check_update(ln_url)
             else:
                 try:
-                    request = requests.get(ln_url, headers=HEADERS, timeout=10)
+                    request = ln_request.get(
+                        ln_url, headers=HEADERS, timeout=5)
                     soup = BeautifulSoup(request.text, bs4_html_parser)
                     if not soup.find('section', 'volume-list'):
                         print('Invalid url. Please try again.')
