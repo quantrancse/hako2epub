@@ -16,7 +16,9 @@ from PIL import Image
 LINE_SIZE = 80
 THREAD_NUM = 8
 HEADERS = {
-    'user-agent': ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.1916.47 Safari/537.36')}
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.97 Safari/537.36',
+    'Referer': 'https://ln.hako.re/'
+}
 
 tool_version = '2.0.2'
 bs4_html_parser = 'html.parser'
@@ -44,7 +46,7 @@ def check_for_tool_updates():
                          'https://github.com/quantrancse/hako2epub', info_style='bold fg:cyan')
             print('-' * LINE_SIZE)
     except Exception:
-        print('Something was wrong. Can not get the tool latest update!')
+        print('Something was wrong. Can not get the tool latest update!')
 
 
 class pcolors:
