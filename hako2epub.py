@@ -20,7 +20,7 @@ HEADERS = {
     'Referer': 'https://ln.hako.re/'
 }
 
-tool_version = '2.0.2'
+tool_version = '2.0.3'
 bs4_html_parser = 'html.parser'
 ln_request = requests.Session()
 
