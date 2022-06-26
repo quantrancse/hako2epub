@@ -17,7 +17,7 @@ LINE_SIZE = 80
 THREAD_NUM = 8
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.97 Safari/537.36',
-    'Referer': 'https://ln.hako.re/'
+    'Referer': 'https://ln.hako.vn/'
 }
 
 tool_version = '2.0.3'
@@ -65,8 +65,8 @@ class Utils():
 
     def re_url(self, ln_url, url):
         new_url = ''
-        if 'ln.hako.re/truyen/' in ln_url:
-            new_url = 'https://ln.hako.re' + url
+        if 'ln.hako.vn/truyen/' in ln_url:
+            new_url = 'https://ln.hako.vn' + url
         else:
             new_url = 'https://docln.net' + url
         return new_url
@@ -811,7 +811,7 @@ class Engine():
             print('--------------------')
 
     def check_valid_url(self, url):
-        if not any(substr in url for substr in ['ln.hako.re/truyen/', 'docln.net/truyen/']):
+        if not any(substr in url for substr in ['ln.hako.vn/truyen/', 'docln.net/truyen/']):
             print('Invalid url. Please try again.')
             return False
         else:
@@ -840,7 +840,7 @@ class Engine():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='A tool to download light novels from https://ln.hako.re in epub file format for offline reading.')
+        description='A tool to download light novels from https://ln.hako.vn in epub file format for offline reading.')
     parser.add_argument('-v', '--version', action='version',
                         version='hako2epub v%s' % tool_version)
     parser.add_argument('ln_url', type=str, nargs='?', default='',
