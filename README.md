@@ -10,7 +10,7 @@
   <h2 align="center">hako2epub</h2>
 
   <p align="center">
-    A tool to download light novels from <a href=https://ln.hako.re/>ln.hako.re</a> in epub file format for offline reading.
+    A tool to download light novels from <a href=https://ln.hako.vn/>ln.hako.vn</a> in epub file format for offline reading.
     <br />
     <br />
     <a href="https://rebrand.ly/hako2epub">Download</a>
@@ -41,10 +41,10 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-A tool to download light novels from [ln.hako.re](https://ln.hako.re) in epub file format for offline reading.
+A tool to download light novels from [ln.hako.vn](https://ln.hako.vn) in epub file format for offline reading.
 
 **_Notes:_**
-* _This tool is a personal standalone project, it does not have any related to [ln.hako.re](https://ln.hako.re) administrators._
+* _This tool is a personal standalone project, it does not have any related to [ln.hako.vn](https://ln.hako.vn) administrators._
 * _If possible, please support the original light novel, hako website, and light novel translation authors._
 * _This tool is for non-commercial purpose only._
 
@@ -87,7 +87,7 @@ pip install ebooklib requests bs4 pillow argparse tqdm questionary
 ```text
 usage: hako2epub.py [-h] [-c ln_url] [-u [ln_url]] [ln_url]
 
-A tool to download light novels from https://ln.hako.re in epub file format for offline reading.
+A tool to download light novels from https://ln.hako.vn in epub file format for offline reading.
 
 positional arguments:
   ln_url                url to the light novel page
