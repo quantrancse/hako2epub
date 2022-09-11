@@ -1,6 +1,7 @@
 import argparse
 import json
 import re
+import time
 from io import BytesIO
 from multiprocessing.dummy import Pool as ThreadPool
 from os import mkdir
@@ -20,9 +21,20 @@ HEADERS = {
     'Referer': 'https://ln.hako.vn/'
 }
 
-tool_version = '2.0.3'
+tool_version = '2.0.5'
 bs4_html_parser = 'html.parser'
 ln_request = requests.Session()
+current_num_requests = 0
+max_num_requests = 190
+
+
+def check_current_num_request(url):
+    global current_num_requests
+    if any(substr in url for substr in ['ln.hako.vn', 'docln.net']):
+        current_num_requests += 1
+    if current_num_requests > max_num_requests:
+        time.sleep(120)
+        current_num_requests = 0
 
 
 def print_format(name='', info='', info_style='bold fg:orange', prefix='! '):
@@ -89,6 +101,7 @@ class Utils():
         try:
             image = Image.open(ln_request.get(
                 image_url, headers=HEADERS, stream=True, timeout=5).raw).convert('RGB')
+            check_current_num_request(image_url)
         except Exception:
             print('Can not get image: ' + image_url)
         return image
@@ -122,6 +135,7 @@ class UpdateLN():
         old_ln_url = old_ln.get('ln_url')
         try:
             request = ln_request.get(old_ln_url, headers=HEADERS, timeout=5)
+            check_current_num_request(old_ln_url)
             soup = BeautifulSoup(request.text, bs4_html_parser)
             new_ln = LNInfo()
             new_ln = new_ln.get_ln_info(old_ln_url, soup, 'update')
@@ -422,6 +436,7 @@ class EpubEngine():
         pool = ThreadPool(THREAD_NUM)
         contents = []
         try:
+            print("After processing 190 requests at a time, the process will pause for 120 seconds to avoid spam blocking. Please be patient if it hangs.")
             contents = list(tqdm.tqdm(pool.imap_unordered(self.make_chapter_content, chapter_urls_index), total=len(
                 chapter_urls_index), desc='Making chapter contents: '))
             contents.sort(key=lambda x: x[0])
@@ -443,6 +458,8 @@ class EpubEngine():
 
             request = ln_request.get(
                 chapter_url, headers=HEADERS, timeout=5)
+            check_current_num_request(chapter_url)
+
             soup = BeautifulSoup(request.text, bs4_html_parser)
 
             xhtml_file = 'chap_%s.xhtml' % str(i + 1)
@@ -524,6 +541,8 @@ class EpubEngine():
         try:
             self.book.set_cover('cover.jpeg', ln_request.get(
                 self.volume.cover_img, headers=HEADERS, stream=True, timeout=5).content)
+            check_current_num_request(self.volume.cover_img)
+
         except Exception:
             print('Error: Can not set cover image!')
             print('--------------------')
@@ -760,6 +779,7 @@ class LNInfo():
             try:
                 request = ln_request.get(
                     volume_url, headers=HEADERS, timeout=5)
+                check_current_num_request(volume_url)
                 soup = BeautifulSoup(request.text, bs4_html_parser)
                 self.volume_list.append(Volume(volume_url, soup))
             except Exception:
@@ -826,6 +846,7 @@ class Engine():
                 try:
                     request = ln_request.get(
                         ln_url, headers=HEADERS, timeout=5)
+                    check_current_num_request(ln_url)
                     soup = BeautifulSoup(request.text, bs4_html_parser)
                     if not soup.find('section', 'volume-list'):
                         print('Invalid url. Please try again.')

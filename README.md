@@ -116,6 +116,7 @@ python hako2epub.py -u
 python hako2epub.py -u light_novel_url
 ```
 ### Notes
+* After processing 190 requests at a time, the program will pause for 120 seconds (2 mins) to avoid spam blocking. Please be patient if it hangs.
 * Light novel will be downloaded into the same folder as the program.
 * Downloaded information will be saved into `ln_info.json` file located in the same folder as the program.
 * If you download specific chapters of a light novel, please enter the full name of the chapter in the "from ... to ..." prompt.
@@ -159,6 +160,6 @@ Distributed under the MIT License. See [LICENSE][license-url] for more informati
 * [EbookLib](https://github.com/aerkalov/ebooklib)
 
 <!-- MARKDOWN LINKS & IMAGES -->
-[python-shield]: https://img.shields.io/badge/python-3.9.6-brightgreen?style=flat-square
+[python-shield]: https://img.shields.io/badge/python-3.9.7-brightgreen?style=flat-square
 [license-shield]: https://img.shields.io/github/license/quantrancse/hako2epub?style=flat-square
 [license-url]: https://github.com/quantrancse/hako2epub/blob/master/LICENSE
