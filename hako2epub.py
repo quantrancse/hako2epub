@@ -831,7 +831,7 @@ class Engine():
             print('--------------------')
 
     def check_valid_url(self, url):
-        if not any(substr in url for substr in ['ln.hako.vn/truyen/', 'docln.net/truyen/']):
+        if not any(substr in url for substr in ['ln.hako.vn/truyen/', 'docln.net/truyen/','ln.hako.vn/convert/','docln.net/convert/']):
             print('Invalid url. Please try again.')
             return False
         else:
