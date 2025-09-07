@@ -49,7 +49,9 @@ A tool to download light novels from [ln.hako.vn](https://ln.hako.vn) in epub fi
 * _This tool is for non-commercial purpose only._
 
 ### Features
-* Working with [docln.net](https://docln.net/).
+* Working with [docln.net](https://docln.net/) and [docln.sbs](https://docln.sbs/).
+* Auto check and switch to working URL.
+* Support all kind of novels (Truyện dịch, Sáng tác, AI Dịch).
 * Support images.
 * Support navigation and table of contents.
 * Notes are shown directly in the light novel content.
@@ -67,11 +69,11 @@ A tool to download light novels from [ln.hako.vn](https://ln.hako.vn) in epub fi
 
 For normal user, download the execution file below. Run and follow the instructions.
 
-**Windows**: [hako2epub.exe ~ 14MB](https://rebrand.ly/hako2epub)
+**Windows**: [hako2epub.exe](https://github.com/quantrancse/hako2epub/releases/download/latest/hako2epub.exe)
 
 ### Prerequisites
 
-* python 3.9.6
+* python >= 3.9
 * ebooklib
 * requests
 * bs4
@@ -85,19 +87,18 @@ pip install ebooklib requests bs4 pillow argparse tqdm questionary
 
 ### Usage
 ```text
-usage: hako2epub.py [-h] [-c ln_url] [-u [ln_url]] [ln_url]
+usage: hako2epub.py [-h] [-v] [-c ln_url] [-u [ln_url]] [ln_url]
 
 A tool to download light novels from https://ln.hako.vn in epub file format for offline reading.
 
 positional arguments:
   ln_url                url to the light novel page
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
-  -c ln_url, --chapter ln_url
-                        download specific chapters of a light novel
-  -u [ln_url], --update [ln_url]
-                        update all/single light novel
+  -v, --version         show program's version number and exit
+  -c, --chapter ln_url  download specific chapters of a light novel
+  -u, --update [ln_url] update all/single light novel
 ```
 * Download a light novel
 ```sh
@@ -158,8 +159,3 @@ Distributed under the MIT License. See [LICENSE][license-url] for more informati
 <!-- ACKNOWLEDGEMENTS -->
 ## Acknowledgements
 * [EbookLib](https://github.com/aerkalov/ebooklib)
-
-<!-- MARKDOWN LINKS & IMAGES -->
-[python-shield]: https://img.shields.io/badge/python-3.9.7-brightgreen?style=flat-square
-[license-shield]: https://img.shields.io/github/license/quantrancse/hako2epub?style=flat-square
-[license-url]: https://github.com/quantrancse/hako2epub/blob/master/LICENSE
