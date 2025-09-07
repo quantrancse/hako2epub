@@ -9,13 +9,16 @@
     A tool to download light novels from <a href=https://ln.hako.vn/>ln.hako.vn</a> in epub file format for offline reading.
     <br />
     <br />
-    <a href="https://rebrand.ly/hako2epub">Download</a>
+    <a href="https://github.com/quantrancse/hako2epub/releases/download/latest/hako2epub.exe">Download</a>
     ·
     <a href="#screenshots">Screenshots</a>
     ·
     <a href="#usage">Script Usage</a>
   </p>
 </p>
+
+## Notes
+It's recommended to use [**1.1.1.1 Cloudflare WARP**](https://one.one.one.one/) when downloading novels for better performance and reliability.
 
 <!-- TABLE OF CONTENTS -->
 ## Table of Contents
