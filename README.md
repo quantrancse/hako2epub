@@ -9,7 +9,7 @@
     A tool to download light novels from <a href=https://ln.hako.vn/>ln.hako.vn</a> in epub file format for offline reading.
     <br />
     <br />
-    <a href="https://github.com/quantrancse/hako2epub/releases/download/latest/hako2epub.exe">Download</a>
+    <a href="https://github.com/quantrancse/hako2epub/releases/download/v2.0.6/hako2epub.exe">Download</a>
     ·
     <a href="#screenshots">Screenshots</a>
     ·
@@ -68,7 +68,7 @@ A tool to download light novels from [ln.hako.vn](https://ln.hako.vn) in epub fi
 
 For normal user, download the execution file below. Run and follow the instructions.
 
-**Windows**: [hako2epub.exe](https://github.com/quantrancse/hako2epub/releases/download/latest/hako2epub.exe)
+**Windows**: [hako2epub.exe](https://github.com/quantrancse/hako2epub/releases/download/v2.0.6/hako2epub.exe)
 
 ### Prerequisites
 
