@@ -9,7 +9,7 @@
     A tool to download light novels from <a href=https://ln.hako.vn/>ln.hako.vn</a> in epub file format for offline reading.
     <br />
     <br />
-    <a href="https://github.com/quantrancse/hako2epub/releases/download/v2.0.6/hako2epub.exe">Download</a>
+    <a href="https://github.com/quantrancse/hako2epub/releases/download/v2.1.0/hako2epub.exe">Download</a>
     ·
     <a href="#screenshots">Screenshots</a>
     ·
@@ -49,8 +49,8 @@ A tool to download light novels from [ln.hako.vn](https://ln.hako.vn) in epub fi
 * _This tool is for non-commercial purpose only._
 
 ### Features
-* Working with [docln.net](https://docln.net/) and [docln.sbs](https://docln.sbs/).
-* Auto check and switch to working URL.
+* Working with [docln.net](https://docln.net/), [ln.hako.vn](https://ln.hako.vn), and [docln.sbs](https://docln.sbs/).
+* Auto check and switch to working domain.
 * Support all kind of novels (Truyện dịch, Sáng tác, AI Dịch).
 * Support images.
 * Support navigation and table of contents.
@@ -60,16 +60,16 @@ A tool to download light novels from [ln.hako.vn](https://ln.hako.vn) in epub fi
 * Update all/single downloaded light novel.
   * Update new volumes.
   * Update new chapters.
-* Support multiprocessing to speed up.
 * Auto get current downloaded light novel in the directory.
 * Auto checking the new tool version.
+* Automatic retry on network failures.
 
 <!-- GETTING STARTED -->
 ## Getting Started
 
 For normal user, download the execution file below. Run and follow the instructions.
 
-**Windows**: [hako2epub.exe](https://github.com/quantrancse/hako2epub/releases/download/v2.0.6/hako2epub.exe)
+**Windows**: [hako2epub.exe](https://github.com/quantrancse/hako2epub/releases/download/v2.1.0/hako2epub.exe)
 
 ### Prerequisites
 
@@ -81,8 +81,11 @@ For normal user, download the execution file below. Run and follow the instructi
 * tqdm
 * questionary
 * argparse
+* cloudscraper
+* playwright
 ```sh
-pip install ebooklib requests bs4 pillow argparse tqdm questionary
+pip install ebooklib requests bs4 pillow argparse tqdm questionary cloudscraper playwright
+playwright install chromium
 ```
 
 ### Usage
@@ -117,7 +120,7 @@ python hako2epub.py -u
 python hako2epub.py -u light_novel_url
 ```
 ### Notes
-* After processing 190 requests at a time, the program will pause for 120 seconds (2 mins) to avoid spam blocking. Please be patient if it hangs.
+* To avoid being blocked by Cloudflare, the download process will be slow.
 * Light novel will be downloaded into the same folder as the program.
 * Downloaded information will be saved into `ln_info.json` file located in the same folder as the program.
 * If you download specific chapters of a light novel, please enter the full name of the chapter in the "from ... to ..." prompt.
@@ -129,7 +132,6 @@ python hako2epub.py -u light_novel_url
 
 <!-- ISSUES -->
 ## Issues
-
 * I only tested on some of my favorite light novels.
 * Sometimes the tool can not get images from some image hosts.
 * Sometimes you have to wait (most cases are under 10 seconds) to download or update the light novels (maybe only the first light novel in the list). If you are over that time, you should use a VPN (1.1.1.1 Cloudflare WARP) to avoid this.
