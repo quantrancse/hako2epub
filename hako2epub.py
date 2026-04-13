@@ -11,6 +11,8 @@ Features:
 - Support multiprocessing to speed up downloads
 """
 
+import threading
+import random
 import argparse
 import json
 import re
@@ -25,6 +27,23 @@ from dataclasses import dataclass, field
 
 import questionary
 import requests
+import base64
+
+try:
+    import cloudscraper
+except ImportError:
+    cloudscraper = None
+    print("Warning: 'cloudscraper' module is missing. Please install it to bypass Cloudflare protection.")
+    print("Run: conda install -c conda-forge cloudscraper OR pip install cloudscraper")
+
+try:
+    from playwright.sync_api import sync_playwright
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
+    print("Warning: 'playwright' module is missing. Please install it to handle protected content.")
+    print("Run: pip install playwright && playwright install chromium")
+
 import tqdm
 from bs4 import BeautifulSoup
 from ebooklib import epub
@@ -41,15 +60,23 @@ logger = logging.getLogger(__name__)
 DOMAINS = ['ln.hako.vn', 'docln.net', 'docln.sbs']
 SLEEP_TIME = 30
 LINE_SIZE = 80
-THREAD_NUM = 8
+THREAD_NUM = 2
+REQUEST_DELAY = 2.0
+IMAGE_DELAY = 1.0
+last_request_time = {}
+
+request_lock = threading.Lock()
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.97 Safari/537.36'
 }
-TOOL_VERSION = '2.0.6'
+TOOL_VERSION = '2.1.0'
 HTML_PARSER = 'html.parser'
 
 # Session for requests
-session = requests.Session()
+if cloudscraper is not None:
+    session = cloudscraper.create_scraper()
+else:
+    session = requests.Session()
 
 
 @dataclass
@@ -113,6 +140,21 @@ class NetworkManager:
         Raises:
             requests.RequestException: If the request fails after retries
         """
+        global last_request_time
+
+        with request_lock:
+            current_time = time.time()
+            domain = url.split('/')[2] if '://' in url else url.split('/')[0]
+            if domain in last_request_time:
+                elapsed = current_time - last_request_time[domain]
+                if elapsed < REQUEST_DELAY:
+                    wait_time = REQUEST_DELAY - \
+                        elapsed + random.uniform(0.5, 1.5)
+                    logger.debug(
+                        f"Rate limiting: waiting {wait_time:.1f}s for {domain}")
+                    time.sleep(wait_time)
+            last_request_time[domain] = time.time()
+
         if not url.startswith("http"):
             url = "https://" + url
 
@@ -152,8 +194,16 @@ class NetworkManager:
                         url, stream=stream, headers=headers, timeout=30)
                     if response.status_code in range(200, 299):
                         return response
+                    elif response.status_code in [403, 429]:
+                        retry_count += 1
+                        wait_time = SLEEP_TIME * \
+                            (2 ** retry_count) + random.uniform(5, 15)
+                        logger.debug(
+                            f"Rate limited ({response.status_code}) by {domain}. "
+                            f"Waiting {wait_time:.1f}s... (Attempt {retry_count}/{max_retries})"
+                        )
+                        time.sleep(wait_time)
                     elif response.status_code == 404:
-                        # Don't retry on 404
                         break
                     else:
                         # Retry on other status codes
@@ -184,6 +234,111 @@ class NetworkManager:
             # Create a generic exception if we don't have one
             raise requests.RequestException(
                 f"Failed to get response from {original_url} using any domain")
+
+
+class ContentDecoder:
+    """Decode protected chapter content."""
+
+    @staticmethod
+    def xor_shuffle_decode(encoded_parts: str, key: str) -> str:
+        """Decode xor_shuffle encoded content."""
+        try:
+            import json
+            import html
+
+            encoded_parts = html.unescape(encoded_parts)
+
+            parts = json.loads(encoded_parts)
+
+            key_bytes = key.encode('utf-8')
+            key_len = len(key_bytes)
+
+            result_parts = []
+            for part in parts:
+                try:
+                    data = base64.b64decode(part)
+                except:
+                    continue
+
+                unshuffled = []
+                for i, b in enumerate(data):
+                    if isinstance(b, int):
+                        pos = i % key_len
+                        unshuffled.append(b ^ key_bytes[pos])
+                    else:
+                        unshuffled.append(b)
+
+                try:
+                    decrypted = bytes(unshuffled).decode(
+                        'utf-8', errors='replace')
+                    result_parts.append(decrypted)
+                except:
+                    continue
+
+            return ''.join(result_parts)
+        except Exception as e:
+            logger.error(f"Error decoding content: {e}")
+            return ""
+
+    @staticmethod
+    def get_content_with_playwright(url: str) -> str:
+        """Get decoded content using Playwright."""
+        if not PLAYWRIGHT_AVAILABLE:
+            return ""
+
+        if not url.startswith('http'):
+            if url.startswith('/'):
+                url = 'https://docln.net' + url
+            else:
+                url = 'https://' + url
+
+        max_retries = 2
+        for attempt in range(max_retries):
+            browser = None
+            try:
+                from playwright.sync_api import sync_playwright
+
+                with sync_playwright() as p:
+                    browser = p.chromium.launch(headless=True)
+                    page = browser.new_page()
+
+                    page.goto(url, timeout=60000)
+                    page.wait_for_load_state('networkidle', timeout=30000)
+
+                    time.sleep(2)
+
+                    page.wait_for_function(
+                        '''() => {
+                            const div = document.getElementById('chapter-content');
+                            return div && div.innerHTML.length > 100;
+                        }''',
+                        timeout=15000)
+
+                    html = page.content()
+                    browser.close()
+                    browser = None
+
+                    soup = BeautifulSoup(html, HTML_PARSER)
+                    content_div = soup.find('div', id='chapter-content')
+
+                    if content_div:
+                        return str(content_div)
+
+                    return ""
+
+            except Exception as e:
+                if browser:
+                    try:
+                        browser.close()
+                    except:
+                        pass
+                logger.warning(f"Playwright attempt {attempt + 1} failed: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(3)
+                    continue
+                logger.error(
+                    f"Playwright error after {max_retries} retries: {e}")
+                return ""
 
 
 class TextUtils:
@@ -264,10 +419,26 @@ class ImageManager:
         Returns:
             The image object or None if failed
         """
+        global last_request_time
+
         if 'imgur.com' in image_url and '.' not in image_url[-5:]:
             image_url += '.jpg'
 
         try:
+            with request_lock:
+                current_time = time.time()
+                domain = image_url.split(
+                    '/')[2] if '://' in image_url else image_url.split('/')[0]
+                if domain in last_request_time:
+                    elapsed = current_time - last_request_time[domain]
+                    if elapsed < IMAGE_DELAY:
+                        wait_time = IMAGE_DELAY - elapsed + \
+                            random.uniform(0.3, 0.8)
+                        logger.debug(
+                            f"Image rate limiting: waiting {wait_time:.1f}s for {domain}")
+                        time.sleep(wait_time)
+                last_request_time[domain] = time.time()
+
             response = NetworkManager.check_available_request(
                 image_url, stream=True)
             image = Image.open(response.raw).convert('RGB')
@@ -904,9 +1075,17 @@ class EpubEngine:
 
             content = f'<h4 align="center"> {chapter_title} </h4>'
 
-            # Get chapter content
             content_div = soup.find('div', id='chapter-content')
-            if content_div:
+            protected_div = soup.find('div', id='chapter-c-protected')
+
+            if protected_div and protected_div.get('data-s') == 'xor_shuffle':
+                decoded_content = ContentDecoder.get_content_with_playwright(
+                    url)
+                if decoded_content:
+                    content += decoded_content
+                else:
+                    content += '<p>Unable to decode protected content</p>'
+            elif content_div:
                 content += self._process_images(content_div, index + 1)
 
             # Get notes
@@ -1165,7 +1344,7 @@ class LightNovelManager:
 
         # Check primary domain first
         try:
-            response = session.get(f"https://{primary_domain}", timeout=10)
+            response = session.get(f"https://{primary_domain}", timeout=60)
             response.raise_for_status()
             accessible_domains.append(primary_domain)
             logger.debug(f"Primary domain {primary_domain} is accessible")
@@ -1176,7 +1355,7 @@ class LightNovelManager:
         # Check other domains
         for domain in DOMAINS[1:]:  # Skip the primary domain
             try:
-                response = session.get(f"https://{domain}", timeout=10)
+                response = session.get(f"https://{domain}", timeout=60)
                 response.raise_for_status()
                 accessible_domains.append(domain)
                 logger.debug(f"Domain {domain} is accessible")
@@ -1219,7 +1398,7 @@ class LightNovelManager:
 
     def _validate_url(self, url: str) -> bool:
         """
-        Check if a URL is valid.
+        Check if a URL is valid and convert to accessible domain if needed.
 
         Args:
             url: The URL to check
@@ -1227,10 +1406,23 @@ class LightNovelManager:
         Returns:
             True if valid, False otherwise
         """
-        if not any(domain in url for domain in DOMAINS):
-            print('Invalid url. Please try again.')
-            return False
-        return True
+        url_lower = url.lower()
+
+        matches = [domain for domain in DOMAINS if domain in url_lower]
+        if matches:
+            return True
+
+        all_domains = ['ln.hako.vn', 'docln.net', 'docln.sbs']
+        for src_domain in all_domains:
+            if src_domain in url_lower:
+                for target_domain in DOMAINS:
+                    if target_domain != src_domain:
+                        new_url = url.replace(src_domain, target_domain)
+                        print(f'Converting URL: {url} -> {new_url}')
+                        url = new_url
+                        return True
+
+        return False
 
     def _update_json_file(self) -> None:
         """Update the JSON file by removing entries for deleted novels."""
@@ -1350,15 +1542,56 @@ class LightNovelManager:
         Args:
             ln_url: The light novel URL
         """
+        max_retries = 3
+        retry_count = 0
+        response = None
+
+        while retry_count < max_retries:
+            try:
+                response = NetworkManager.check_available_request(ln_url)
+                soup = BeautifulSoup(response.text, HTML_PARSER)
+
+                if soup.find('section', 'volume-list'):
+                    break
+
+                retry_count += 1
+                if retry_count < max_retries:
+                    logger.warning(
+                        f'Page load failed, retrying ({retry_count}/{max_retries})...')
+                    time.sleep(3)
+                else:
+                    print('Invalid url. Please try again.')
+                    return
+
+            except requests.RequestException as e:
+                retry_count += 1
+                if retry_count < max_retries:
+                    logger.warning(
+                        f'Network error: {e}, retrying ({retry_count}/{max_retries})...')
+                    time.sleep(3)
+                else:
+                    logger.error(
+                        f'Network error while checking light novel url: {e}')
+                    print('Error: Network error while checking light novel url!')
+                    print('-' * LINE_SIZE)
+                    return
+            except Exception as e:
+                retry_count += 1
+                if retry_count < max_retries:
+                    logger.warning(
+                        f'Error: {e}, retrying ({retry_count}/{max_retries})...')
+                    time.sleep(3)
+                else:
+                    logger.error(f'Error checking light novel url: {e}')
+                    print('Error: Cannot check light novel url!')
+                    print('-' * LINE_SIZE)
+                    return
+
+        if not response:
+            return
+
         try:
-            response = NetworkManager.check_available_request(ln_url)
             soup = BeautifulSoup(response.text, HTML_PARSER)
-
-            if not soup.find('section', 'volume-list'):
-                print('Invalid url. Please try again.')
-                return
-
-            # Create light novel object
             ln = self._parse_light_novel(ln_url, soup, 'chapter')
 
             if ln.volumes:
