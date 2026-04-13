@@ -18,7 +18,8 @@
 </p>
 
 ## Notes
-It's recommended to use [**1.1.1.1 Cloudflare WARP**](https://one.one.one.one/) when downloading novels for better performance and reliability.
+- Hako is under a DDoS attack (https://docln.net/thao-luan/3437-bi-ddos), downloads will be very unstable.
+- It's highly recommended to use [**1.1.1.1 Cloudflare WARP**](https://one.one.one.one/) when downloading novels for better performance and reliability.
 
 <!-- TABLE OF CONTENTS -->
 ## Table of Contents
