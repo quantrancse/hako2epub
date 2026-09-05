@@ -18,6 +18,7 @@ import json
 import re
 import time
 import logging
+import queue
 from io import BytesIO
 from multiprocessing.dummy import Pool as ThreadPool
 from os import mkdir
@@ -60,23 +61,124 @@ logger = logging.getLogger(__name__)
 DOMAINS = ['ln.hako.vn', 'docln.net', 'docln.sbs']
 SLEEP_TIME = 30
 LINE_SIZE = 80
-THREAD_NUM = 2
-REQUEST_DELAY = 2.0
-IMAGE_DELAY = 1.0
-last_request_time = {}
-
-request_lock = threading.Lock()
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.97 Safari/537.36'
 }
-TOOL_VERSION = '2.1.0'
+TOOL_VERSION = '2.2.0'
 HTML_PARSER = 'html.parser'
 
-# Session for requests
-if cloudscraper is not None:
-    session = cloudscraper.create_scraper()
-else:
-    session = requests.Session()
+# Mode configuration
+MODE_CONFIG = {
+    'fast': {
+        'thread_num': 8,
+        'request_delay': 0.0,
+        'image_delay': 0.0,
+        'timeout': 10,
+        'use_cloudscraper': False,
+        'use_playwright': True
+    },
+    'slow': {
+        'thread_num': 2,
+        'request_delay': 2.0,
+        'image_delay': 1.0,
+        'timeout': 60,
+        'use_cloudscraper': True,
+        'use_playwright': True
+    }
+}
+
+# Default to slow mode
+CURRENT_MODE = 'slow'
+THREAD_NUM = MODE_CONFIG['slow']['thread_num']
+REQUEST_DELAY = MODE_CONFIG['slow']['request_delay']
+IMAGE_DELAY = MODE_CONFIG['slow']['image_delay']
+REQUEST_TIMEOUT = MODE_CONFIG['slow']['timeout']
+USE_CLOUDSCRAPER = MODE_CONFIG['slow']['use_cloudscraper']
+USE_PLAYWRIGHT = MODE_CONFIG['slow']['use_playwright']
+
+last_request_time = {}
+request_lock = threading.Lock()
+
+# Playwright worker thread
+playwright_queue = None
+playwright_result = None
+playwright_worker = None
+playwright_worker_lock = threading.Lock()
+
+# Session for requests (initialized based on mode)
+session = None
+
+def init_session(mode: str) -> None:
+    """Initialize the request session based on mode."""
+    global session
+    if mode == 'slow' and cloudscraper is not None:
+        session = cloudscraper.create_scraper()
+    else:
+        session = requests.Session()
+
+def _playwright_worker_loop(queue):
+    """Worker thread that handles Playwright operations."""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        while True:
+            task = queue.get()
+            if task is None:
+                break
+            url, result_queue = task
+            try:
+                page = browser.new_page()
+                page.goto(url, timeout=60000)
+                page.wait_for_load_state('networkidle', timeout=30000)
+                time.sleep(2)
+                page.wait_for_function(
+                    '''() => {
+                        const div = document.getElementById('chapter-content');
+                        return div && div.innerHTML.length > 100;
+                    }''',
+                    timeout=15000)
+                html = page.content()
+                page.close()
+                result_queue.put(html)
+            except Exception as e:
+                result_queue.put(str(e))
+        browser.close()
+
+def init_playwright_worker():
+    """Initialize Playwright worker thread."""
+    global playwright_queue, playwright_worker
+    if playwright_worker is not None and playwright_worker.is_alive():
+        return
+    playwright_queue = queue.Queue()
+    playwright_worker = threading.Thread(target=_playwright_worker_loop, args=(playwright_queue,), daemon=True)
+    playwright_worker.start()
+
+def cleanup_playwright_worker():
+    """Cleanup Playwright worker thread."""
+    global playwright_queue, playwright_worker
+    if playwright_queue is not None:
+        playwright_queue.put(None)
+    if playwright_worker is not None:
+        playwright_worker.join(timeout=10)
+
+def playwright_get_content(url: str) -> str:
+    """Get decoded content using Playwright worker thread."""
+    global playwright_queue
+    if playwright_queue is None:
+        init_playwright_worker()
+    
+    result_queue = queue.Queue()
+    playwright_queue.put((url, result_queue))
+    
+    result = result_queue.get(timeout=120)
+    if result.startswith("Error") or "Cannot switch" in result:
+        return ""
+    
+    soup = BeautifulSoup(result, HTML_PARSER)
+    content_div = soup.find('div', id='chapter-content')
+    if content_div:
+        return str(content_div)
+    return ""
 
 
 @dataclass
@@ -142,18 +244,20 @@ class NetworkManager:
         """
         global last_request_time
 
-        with request_lock:
-            current_time = time.time()
-            domain = url.split('/')[2] if '://' in url else url.split('/')[0]
-            if domain in last_request_time:
-                elapsed = current_time - last_request_time[domain]
-                if elapsed < REQUEST_DELAY:
-                    wait_time = REQUEST_DELAY - \
-                        elapsed + random.uniform(0.5, 1.5)
-                    logger.debug(
-                        f"Rate limiting: waiting {wait_time:.1f}s for {domain}")
-                    time.sleep(wait_time)
-            last_request_time[domain] = time.time()
+        # Rate limiting only in slow mode
+        if REQUEST_DELAY > 0:
+            with request_lock:
+                current_time = time.time()
+                domain = url.split('/')[2] if '://' in url else url.split('/')[0]
+                if domain in last_request_time:
+                    elapsed = current_time - last_request_time[domain]
+                    if elapsed < REQUEST_DELAY:
+                        wait_time = REQUEST_DELAY - \
+                            elapsed + random.uniform(0.5, 1.5)
+                        logger.debug(
+                            f"Rate limiting: waiting {wait_time:.1f}s for {domain}")
+                        time.sleep(wait_time)
+                last_request_time[domain] = time.time()
 
         if not url.startswith("http"):
             url = "https://" + url
@@ -191,7 +295,7 @@ class NetworkManager:
             while retry_count < max_retries:
                 try:
                     response = session.get(
-                        url, stream=stream, headers=headers, timeout=30)
+                        url, stream=stream, headers=headers, timeout=REQUEST_TIMEOUT)
                     if response.status_code in range(200, 299):
                         return response
                     elif response.status_code in [403, 429]:
@@ -282,8 +386,8 @@ class ContentDecoder:
 
     @staticmethod
     def get_content_with_playwright(url: str) -> str:
-        """Get decoded content using Playwright."""
-        if not PLAYWRIGHT_AVAILABLE:
+        """Get decoded content using Playwright worker thread."""
+        if not USE_PLAYWRIGHT or not PLAYWRIGHT_AVAILABLE:
             return ""
 
         if not url.startswith('http'):
@@ -292,46 +396,11 @@ class ContentDecoder:
             else:
                 url = 'https://' + url
 
-        max_retries = 2
+        max_retries = 3
         for attempt in range(max_retries):
-            browser = None
             try:
-                from playwright.sync_api import sync_playwright
-
-                with sync_playwright() as p:
-                    browser = p.chromium.launch(headless=True)
-                    page = browser.new_page()
-
-                    page.goto(url, timeout=60000)
-                    page.wait_for_load_state('networkidle', timeout=30000)
-
-                    time.sleep(2)
-
-                    page.wait_for_function(
-                        '''() => {
-                            const div = document.getElementById('chapter-content');
-                            return div && div.innerHTML.length > 100;
-                        }''',
-                        timeout=15000)
-
-                    html = page.content()
-                    browser.close()
-                    browser = None
-
-                    soup = BeautifulSoup(html, HTML_PARSER)
-                    content_div = soup.find('div', id='chapter-content')
-
-                    if content_div:
-                        return str(content_div)
-
-                    return ""
-
+                return playwright_get_content(url)
             except Exception as e:
-                if browser:
-                    try:
-                        browser.close()
-                    except:
-                        pass
                 logger.warning(f"Playwright attempt {attempt + 1} failed: {e}")
                 if attempt < max_retries - 1:
                     time.sleep(3)
@@ -425,19 +494,21 @@ class ImageManager:
             image_url += '.jpg'
 
         try:
-            with request_lock:
-                current_time = time.time()
-                domain = image_url.split(
-                    '/')[2] if '://' in image_url else image_url.split('/')[0]
-                if domain in last_request_time:
-                    elapsed = current_time - last_request_time[domain]
-                    if elapsed < IMAGE_DELAY:
-                        wait_time = IMAGE_DELAY - elapsed + \
-                            random.uniform(0.3, 0.8)
-                        logger.debug(
-                            f"Image rate limiting: waiting {wait_time:.1f}s for {domain}")
-                        time.sleep(wait_time)
-                last_request_time[domain] = time.time()
+            # Image rate limiting only in slow mode
+            if IMAGE_DELAY > 0:
+                with request_lock:
+                    current_time = time.time()
+                    domain = image_url.split(
+                        '/')[2] if '://' in image_url else image_url.split('/')[0]
+                    if domain in last_request_time:
+                        elapsed = current_time - last_request_time[domain]
+                        if elapsed < IMAGE_DELAY:
+                            wait_time = IMAGE_DELAY - elapsed + \
+                                random.uniform(0.3, 0.8)
+                            logger.debug(
+                                f"Image rate limiting: waiting {wait_time:.1f}s for {domain}")
+                            time.sleep(wait_time)
+                    last_request_time[domain] = time.time()
 
             response = NetworkManager.check_available_request(
                 image_url, stream=True)
@@ -1344,7 +1415,7 @@ class LightNovelManager:
 
         # Check primary domain first
         try:
-            response = session.get(f"https://{primary_domain}", timeout=60)
+            response = session.get(f"https://{primary_domain}", timeout=REQUEST_TIMEOUT)
             response.raise_for_status()
             accessible_domains.append(primary_domain)
             logger.debug(f"Primary domain {primary_domain} is accessible")
@@ -1355,7 +1426,7 @@ class LightNovelManager:
         # Check other domains
         for domain in DOMAINS[1:]:  # Skip the primary domain
             try:
-                response = session.get(f"https://{domain}", timeout=60)
+                response = session.get(f"https://{domain}", timeout=REQUEST_TIMEOUT)
                 response.raise_for_status()
                 accessible_domains.append(domain)
                 logger.debug(f"Domain {domain} is accessible")
@@ -1820,10 +1891,14 @@ class LightNovelManager:
 
 def main():
     """Main entry point for the application."""
+    global CURRENT_MODE, THREAD_NUM, REQUEST_DELAY, IMAGE_DELAY, REQUEST_TIMEOUT, USE_CLOUDSCRAPER, USE_PLAYWRIGHT
+
     parser = argparse.ArgumentParser(
         description='A tool to download light novels from https://ln.hako.vn in epub file format for offline reading.')
     parser.add_argument('-v', '--version', action='version',
                         version=f'hako2epub v{TOOL_VERSION}')
+    parser.add_argument('-m', '--mode', type=str, choices=['fast', 'slow'], default='slow',
+                        help='Download mode: fast (v2.0.6 behavior) or slow (v2.1.0 behavior, default)')
     parser.add_argument('ln_url', type=str, nargs='?',
                         default='',
                         help='url to the light novel page')
@@ -1833,17 +1908,40 @@ def main():
                         help='update all/single light novel')
 
     args = parser.parse_args()
+
+    # Apply mode configuration
+    CURRENT_MODE = args.mode
+    config = MODE_CONFIG[CURRENT_MODE]
+    THREAD_NUM = config['thread_num']
+    REQUEST_DELAY = config['request_delay']
+    IMAGE_DELAY = config['image_delay']
+    REQUEST_TIMEOUT = config['timeout']
+    USE_CLOUDSCRAPER = config['use_cloudscraper']
+    USE_PLAYWRIGHT = config['use_playwright']
+
+    # Initialize session based on mode
+    init_session(CURRENT_MODE)
+
+    # Print mode info
+    print(f"Mode: {CURRENT_MODE.upper()} ({'v2.0.6' if CURRENT_MODE == 'fast' else 'v2.1.0'} behavior)")
+    print(f"Threads: {THREAD_NUM}, Request delay: {REQUEST_DELAY}s, Image delay: {IMAGE_DELAY}s")
+    print("-" * LINE_SIZE)
+
     manager = LightNovelManager()
 
-    if args.chapter:
-        manager.start(args.chapter, 'chapter')
-    elif 'update' in args:
-        if args.update:
-            manager.start(args.update, 'update')
+    try:
+        if args.chapter:
+            manager.start(args.chapter, 'chapter')
+        elif 'update' in args:
+            if args.update:
+                manager.start(args.update, 'update')
+            else:
+                manager.start('', 'update_all')
         else:
-            manager.start('', 'update_all')
-    else:
-        manager.start(args.ln_url, 'default')
+            manager.start(args.ln_url, 'default')
+    finally:
+        # Cleanup Playwright worker
+        cleanup_playwright_worker()
 
 
 if __name__ == '__main__':

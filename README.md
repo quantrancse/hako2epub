@@ -9,7 +9,7 @@
     A tool to download light novels from <a href=https://ln.hako.vn/>ln.hako.vn</a> in epub file format for offline reading.
     <br />
     <br />
-    <a href="https://github.com/quantrancse/hako2epub/releases/download/v2.1.0/hako2epub.exe">Download</a>
+    <a href="https://github.com/quantrancse/hako2epub/releases/download/v2.2.0/hako2epub.exe">Download</a>
     ·
     <a href="#screenshots">Screenshots</a>
     ·
@@ -63,13 +63,14 @@ A tool to download light novels from [ln.hako.vn](https://ln.hako.vn) in epub fi
 * Auto get current downloaded light novel in the directory.
 * Auto checking the new tool version.
 * Automatic retry on network failures.
+* **Dual download modes**: Fast mode for speed, Slow mode for reliability with Cloudflare protection.
 
 <!-- GETTING STARTED -->
 ## Getting Started
 
 For normal user, download the execution file below. Run and follow the instructions.
 
-**Windows**: [hako2epub.exe](https://github.com/quantrancse/hako2epub/releases/download/v2.1.0/hako2epub.exe)
+**Windows**: [hako2epub.exe](https://github.com/quantrancse/hako2epub/releases/download/v2.2.0/hako2epub.exe)
 
 ### Prerequisites
 
@@ -90,7 +91,7 @@ playwright install chromium
 
 ### Usage
 ```text
-usage: hako2epub.py [-h] [-v] [-c ln_url] [-u [ln_url]] [ln_url]
+usage: hako2epub.py [-h] [-v] [-m {fast,slow}] [-c ln_url] [-u [ln_url]] [ln_url]
 
 A tool to download light novels from https://ln.hako.vn in epub file format for offline reading.
 
@@ -100,12 +101,23 @@ positional arguments:
 options:
   -h, --help            show this help message and exit
   -v, --version         show program's version number and exit
+  -m, --mode {fast,slow} download mode: fast (faster, may get blocked) or slow (default, more reliable)
   -c, --chapter ln_url  download specific chapters of a light novel
   -u, --update [ln_url] update all/single light novel
 ```
-* Download a light novel
+
+#### Download Modes
+* **Slow mode (default)**: More reliable, handles protected content, uses Cloudflare protection
+* **Fast mode**: Faster downloads with more threads, but may get blocked by Cloudflare
+
+#### Examples
+* Download a light novel (slow mode, default)
 ```sh
 python hako2epub.py light_novel_url
+```
+* Download a light novel (fast mode)
+```sh
+python hako2epub.py --mode fast light_novel_url
 ```
 * Download specific chapters of light novel
 ```sh
@@ -120,7 +132,8 @@ python hako2epub.py -u
 python hako2epub.py -u light_novel_url
 ```
 ### Notes
-* To avoid being blocked by Cloudflare, the download process will be slow.
+* Slow mode (default) includes delays to avoid being blocked by Cloudflare.
+* Fast mode uses more threads and no delays for faster downloads, but may get blocked.
 * Light novel will be downloaded into the same folder as the program.
 * Downloaded information will be saved into `ln_info.json` file located in the same folder as the program.
 * If you download specific chapters of a light novel, please enter the full name of the chapter in the "from ... to ..." prompt.
