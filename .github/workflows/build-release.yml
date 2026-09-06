@@ -1,0 +1,36 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller ebooklib requests bs4 pillow argparse tqdm questionary cloudscraper playwright
+          playwright install chromium
+
+      - name: Build executable
+        run: |
+          pyinstaller hako2epub.spec
+
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/hako2epub.exe
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

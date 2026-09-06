@@ -19,6 +19,8 @@ import re
 import time
 import logging
 import queue
+import os
+import sys
 from io import BytesIO
 from multiprocessing.dummy import Pool as ThreadPool
 from os import mkdir
@@ -29,6 +31,7 @@ from dataclasses import dataclass, field
 import questionary
 import requests
 import base64
+import html
 
 try:
     import cloudscraper
@@ -44,6 +47,14 @@ except ImportError:
     PLAYWRIGHT_AVAILABLE = False
     print("Warning: 'playwright' module is missing. Please install it to handle protected content.")
     print("Run: pip install playwright && playwright install chromium")
+# Point Playwright at the Chromium browser bundled inside the frozen exe.
+if getattr(sys, 'frozen', False):
+    _meipass = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+    _bundled = os.path.join(_meipass, 'ms-playwright')
+    if os.path.isdir(_bundled):
+        os.environ['PLAYWRIGHT_BROWSERS_PATH'] = _bundled
+        # Skip Playwright's host check (would shell out to winldd, not bundled).
+        os.environ['PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS'] = '1'
 
 import tqdm
 from bs4 import BeautifulSoup
@@ -64,7 +75,7 @@ LINE_SIZE = 80
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.97 Safari/537.36'
 }
-TOOL_VERSION = '2.2.0'
+TOOL_VERSION = '2.3.0'
 HTML_PARSER = 'html.parser'
 
 # Mode configuration
@@ -228,13 +239,14 @@ class NetworkManager:
     """Handles network requests with retry logic."""
 
     @staticmethod
-    def check_available_request(url: str, stream: bool = False) -> requests.Response:
+    def check_available_request(url: str, stream: bool = False, referer: Optional[str] = None) -> requests.Response:
         """
         Check if a request to the given URL is available and handle retries.
 
         Args:
             url: The URL to request
             stream: Whether to stream the response
+            referer: Optional Referer header; defaults to the target domain
 
         Returns:
             The response object
@@ -288,7 +300,11 @@ class NetworkManager:
 
             # Update headers with referer
             headers = HEADERS.copy()
-            headers['Referer'] = f'https://{domain}'
+            
+            if referer:
+                headers["Referer"] = referer
+            else:
+                headers["Referer"] = f"https://{domain}"
 
             retry_count = 0
             max_retries = 3
@@ -345,41 +361,45 @@ class ContentDecoder:
 
     @staticmethod
     def xor_shuffle_decode(encoded_parts: str, key: str) -> str:
-        """Decode xor_shuffle encoded content."""
+        """Decode xor_shuffle encoded content; returns "" on failure."""
+        if not encoded_parts or not key:
+            return ""
         try:
-            import json
-            import html
+            parts = json.loads(html.unescape(encoded_parts))
 
-            encoded_parts = html.unescape(encoded_parts)
-
-            parts = json.loads(encoded_parts)
+            # Sort by first 4 chars as integer (matches docln.net JS)
+            parts.sort(key=lambda p: int(p[:4]))
 
             key_bytes = key.encode('utf-8')
             key_len = len(key_bytes)
 
             result_parts = []
             for part in parts:
+                # Strip the first 4 chars (the sort key)
+                b64_data = part[4:]
                 try:
-                    data = base64.b64decode(part)
-                except:
+                    data = base64.b64decode(b64_data)
+                except Exception:
                     continue
 
-                unshuffled = []
-                for i, b in enumerate(data):
-                    if isinstance(b, int):
-                        pos = i % key_len
-                        unshuffled.append(b ^ key_bytes[pos])
-                    else:
-                        unshuffled.append(b)
+                # XOR decode with the key
+                decoded = bytes(
+                    [b ^ key_bytes[i % key_len] for i, b in enumerate(data)])
+                result_parts.append(
+                    decoded.decode('utf-8', errors='replace'))
 
-                try:
-                    decrypted = bytes(unshuffled).decode(
-                        'utf-8', errors='replace')
-                    result_parts.append(decrypted)
-                except:
-                    continue
+            result = ''.join(result_parts)
 
-            return ''.join(result_parts)
+            # Treat mostly-garbled output (U+FFFD) as a failed decode.
+            bad = result.count(chr(0xFFFD))
+            if result and bad > len(result) * 0.01:
+                logger.error(
+                    f"Decoded content looks corrupted "
+                    f"({bad}/{len(result)} replacement chars); "
+                    f"treating decode as failed")
+                return ""
+
+            return result
         except Exception as e:
             logger.error(f"Error decoding content: {e}")
             return ""
@@ -478,7 +498,7 @@ class ImageManager:
     """Handles image processing and downloading."""
 
     @staticmethod
-    def get_image(image_url: str) -> Optional[Image.Image]:
+    def get_image(image_url: str, referer: Optional[str] = None) -> Optional[Image.Image]:
         """
         Get image from URL.
 
@@ -511,7 +531,7 @@ class ImageManager:
                     last_request_time[domain] = time.time()
 
             response = NetworkManager.check_available_request(
-                image_url, stream=True)
+                image_url, stream=True, referer=referer)
             image = Image.open(response.raw).convert('RGB')
             return image
         except Exception as e:
@@ -1149,15 +1169,31 @@ class EpubEngine:
             content_div = soup.find('div', id='chapter-content')
             protected_div = soup.find('div', id='chapter-c-protected')
 
-            if protected_div and protected_div.get('data-s') == 'xor_shuffle':
-                decoded_content = ContentDecoder.get_content_with_playwright(
-                    url)
+            # Decode protected (xor_shuffle) content directly from data-c/data-k.
+            is_protected = (protected_div is not None
+                            and protected_div.get('data-s') == 'xor_shuffle')
+            if is_protected:
+                decoded_content = ContentDecoder.xor_shuffle_decode(
+                    protected_div.get('data-c') or "",
+                    protected_div.get('data-k') or "")
+                # Fallback: Playwright (only if direct decode failed)
+                if not decoded_content:
+                    decoded_content = ContentDecoder.get_content_with_playwright(url)
                 if decoded_content:
-                    content += decoded_content
+                    decoded_soup = BeautifulSoup(decoded_content, HTML_PARSER)
+                    decoded_content_div = decoded_soup.find('div', id='chapter-content')
+                    if decoded_content_div:
+                        content += self._process_images(decoded_content_div, index + 1, url)
+                    else:
+                        # Direct decode returns raw inner HTML (p/img tags)
+                        content += self._process_images(decoded_soup, index + 1, url)
+                elif content_div:
+                    # Fall back to regular content if all decoding fails
+                    content += self._process_images(content_div, index + 1, url)
                 else:
                     content += '<p>Unable to decode protected content</p>'
             elif content_div:
-                content += self._process_images(content_div, index + 1)
+                content += self._process_images(content_div, index + 1, url)
 
             # Get notes
             notes = self._get_chapter_notes(soup)
@@ -1187,13 +1223,14 @@ class EpubEngine:
             print('-' * LINE_SIZE)
             return None
 
-    def _process_images(self, content_div: BeautifulSoup, chapter_id: int) -> str:
+    def _process_images(self, content_div: BeautifulSoup, chapter_id: int, referer: Optional[str] = None) -> str:
         """
         Process images in chapter content.
 
         Args:
             content_div: The chapter content div
             chapter_id: The chapter ID
+            referer: Optional referer URL for image requests
 
         Returns:
             The processed content with images
@@ -1211,7 +1248,7 @@ class EpubEngine:
                 img_url = img_tag.get('src')
                 if img_url and "chapter-banners" not in img_url:
                     try:
-                        image = ImageManager.get_image(img_url)
+                        image = ImageManager.get_image(img_url, referer=referer)
                         if image is None:
                             continue
 
@@ -1889,9 +1926,145 @@ class LightNovelManager:
             }
 
 
+def print_title():
+    """Print the application title and banner."""
+    hako_banner_len = 66
+    padding = ' ' * ((LINE_SIZE - hako_banner_len) // 2)
+    print(f"""
+        {padding} _           _        ___                  _
+        {padding}| |         | |      |__ \\                | |
+        {padding}| |__   __ _| | _____   ) |___ _ __  _   _| |__
+        {padding}| '_ \\ / _` | |/ / _ \\ / // _ \\ '_ \\| | | | '_ \\
+        {padding}| | | | (_| |   < (_) / /|  __/ |_) | |_| | |_) |
+        {padding}|_| |_|\\__,_|_|\\_\\___/____\\___| .__/ \\__,_|_.__/
+        {padding}                              | |
+        {padding}                              |_|
+        """)
+
+    version = 'version ' + TOOL_VERSION
+    padding = ' ' * ((LINE_SIZE - len(version)) // 2)
+    print(padding + version)
+
+    print('=' * LINE_SIZE)
+    desc_1 = 'A tool to download light novels from '
+    hako_url = 'https://ln.hako.vn'
+    padding = ' ' * ((LINE_SIZE - len(desc_1 + hako_url)) // 2)
+    print(f'{padding}{desc_1}{ColorCodes.OKCYAN}{hako_url}{ColorCodes.ENDC}')
+
+    desc_2 = 'in epub file format for offline reading.'
+    padding = ' ' * ((LINE_SIZE - len(desc_2)) // 2)
+    print(padding + desc_2)
+
+    print('=' * LINE_SIZE)
+    author = 'https://github.com/quantrancse'
+    padding = ' ' * ((LINE_SIZE - len('Created by ' + author)) // 2)
+    print(f'{padding}Created by {ColorCodes.OKCYAN}{author}{ColorCodes.ENDC}')
+    print('-' * LINE_SIZE)
+
+
+def check_for_tool_updates():
+    """Check for tool updates."""
+    try:
+        release_api = 'https://api.github.com/repos/quantrancse/hako2epub/releases/latest'
+        response = requests.get(release_api, headers=HEADERS, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        latest_release = data['tag_name'][1:]
+
+        if TOOL_VERSION != latest_release:
+            OutputFormatter.print_formatted(
+                'Current tool version: ', TOOL_VERSION, info_style='bold fg:red')
+            OutputFormatter.print_formatted(
+                'Latest tool version: ', latest_release, info_style='bold fg:green')
+            OutputFormatter.print_formatted(
+                'Please upgrade the tool at: ', 'https://github.com/quantrancse/hako2epub', info_style='bold fg:cyan')
+            print('-' * LINE_SIZE)
+    except requests.RequestException as e:
+        logger.error(f"Failed to check for updates: {e}")
+    except KeyError as e:
+        logger.error(f"Failed to parse update response: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error while checking for updates: {e}")
+
+
+def run_tui():
+    """Run the text user interface."""
+    global CURRENT_MODE, THREAD_NUM, REQUEST_DELAY, IMAGE_DELAY, REQUEST_TIMEOUT, USE_CLOUDSCRAPER, USE_PLAYWRIGHT
+    
+    # Ask for mode selection at startup
+    mode_choice = questionary.select(
+        'Select download mode:',
+        choices=[
+            questionary.Choice('SLOW - More reliable, handles protected content', value='slow'),
+            questionary.Choice('FAST - Faster, may get blocked by cloudflare', value='fast')
+        ],
+        default='slow'
+    ).ask()
+    
+    # Apply mode configuration
+    CURRENT_MODE = mode_choice
+    config = MODE_CONFIG[CURRENT_MODE]
+    THREAD_NUM = config['thread_num']
+    REQUEST_DELAY = config['request_delay']
+    IMAGE_DELAY = config['image_delay']
+    REQUEST_TIMEOUT = config['timeout']
+    USE_CLOUDSCRAPER = config['use_cloudscraper']
+    USE_PLAYWRIGHT = config['use_playwright']
+    
+    # Initialize session based on mode
+    init_session(CURRENT_MODE)
+    
+    while True:
+        print_title()
+        check_for_tool_updates()
+
+        choices = [
+            'Download a light novel',
+            'Download specific chapters of a light novel',
+            'Update all downloaded light novels',
+            'Update a light novel',
+            'Exit'
+        ]
+
+        option = questionary.select(
+            'Select an option:', choices=choices, use_shortcuts=True).ask()
+        manager = LightNovelManager()
+        
+        if option == 'Download a light novel':
+            ln_url = questionary.text('Enter light novel url:').ask()
+            manager.start(ln_url, 'default')
+        elif option == 'Download specific chapters of a light novel':
+            ln_url = questionary.text('Enter light novel url:').ask()
+            manager.start(ln_url, 'chapter')
+        elif option == 'Update all downloaded light novels':
+            manager.start(None, 'update_all')
+        elif option == 'Update a light novel':
+            ln_url = questionary.text('Enter light novel url:').ask()
+            manager.start(ln_url, 'update')
+        elif option == 'Exit':
+            break
+
+        e_signal = questionary.text('Exit (y/n)').ask()
+
+        if e_signal == 'n' or e_signal == 'no':
+            clear = "\n" * 100
+            print(clear)
+        else:
+            break
+    
+    # Cleanup Playwright worker
+    cleanup_playwright_worker()
+
+
 def main():
     """Main entry point for the application."""
     global CURRENT_MODE, THREAD_NUM, REQUEST_DELAY, IMAGE_DELAY, REQUEST_TIMEOUT, USE_CLOUDSCRAPER, USE_PLAYWRIGHT
+
+    # For .exe distribution, default to TUI mode when launched with no arguments
+    import sys
+    if len(sys.argv) == 1:
+        run_tui()
+        return
 
     parser = argparse.ArgumentParser(
         description='A tool to download light novels from https://ln.hako.vn in epub file format for offline reading.')
@@ -1906,6 +2079,8 @@ def main():
                         help='download specific chapters of a light novel')
     parser.add_argument('-u', '--update', type=str, metavar='ln_url', nargs='?', default=argparse.SUPPRESS,
                         help='update all/single light novel')
+    parser.add_argument('-i', '--interactive', action='store_true',
+                        help='run in interactive mode (TUI)')
 
     args = parser.parse_args()
 
@@ -1923,14 +2098,15 @@ def main():
     init_session(CURRENT_MODE)
 
     # Print mode info
-    print(f"Mode: {CURRENT_MODE.upper()} ({'v2.0.6' if CURRENT_MODE == 'fast' else 'v2.1.0'} behavior)")
-    print(f"Threads: {THREAD_NUM}, Request delay: {REQUEST_DELAY}s, Image delay: {IMAGE_DELAY}s")
+    print(f"Mode: {CURRENT_MODE.upper()}")
     print("-" * LINE_SIZE)
 
     manager = LightNovelManager()
 
     try:
-        if args.chapter:
+        if args.interactive:
+            run_tui()
+        elif args.chapter:
             manager.start(args.chapter, 'chapter')
         elif 'update' in args:
             if args.update:
