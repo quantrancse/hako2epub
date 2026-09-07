@@ -9,7 +9,9 @@
     A tool to download light novels from <a href=https://ln.hako.vn/>ln.hako.vn</a> in epub file format for offline reading.
     <br />
     <br />
-    <a href="https://github.com/quantrancse/hako2epub/releases/latest/download/hako2epub.exe">Download</a>
+    <a href="https://github.com/quantrancse/hako2epub/releases/latest/download/hako2epub.exe">Windows</a>
+    ·
+    <a href="https://github.com/quantrancse/hako2epub/releases/latest/download/hako2epub.apk">Android</a>
     ·
     <a href="#screenshots">Screenshots</a>
     ·
@@ -60,10 +62,12 @@ A tool to download light novels from [ln.hako.vn](https://ln.hako.vn) in epub fi
 * Update all/single downloaded light novel.
   * Update new volumes.
   * Update new chapters.
+* Delete downloaded light novels or individual volumes.
 * Auto get current downloaded light novel in the directory.
 * Auto checking the new tool version.
 * Automatic retry on network failures.
 * **Dual download modes**: Fast mode for speed, Slow mode for reliability with Cloudflare protection.
+* **Android app**: the same downloader as an APK, saving into `Downloads/hako2epub`.
 
 <!-- GETTING STARTED -->
 ## Getting Started
@@ -71,6 +75,8 @@ A tool to download light novels from [ln.hako.vn](https://ln.hako.vn) in epub fi
 For normal user, download the execution file below. Run and follow the instructions.
 
 **Windows**: [hako2epub.exe](https://github.com/quantrancse/hako2epub/releases/latest/download/hako2epub.exe)
+
+**Android**: [hako2epub.apk](https://github.com/quantrancse/hako2epub/releases/latest/download/hako2epub.apk)
 
 ### Prerequisites
 
@@ -91,7 +97,9 @@ playwright install chromium
 
 ### Usage
 ```text
-usage: hako2epub.py [-h] [-v] [-m {fast,slow}] [-c ln_url] [-u [ln_url]] [ln_url]
+usage: hako2epub.py [-h] [-v] [-m {fast,slow}] [-c ln_url] [-u [ln_url]] [-d]
+                    [-i]
+                    [ln_url]
 
 A tool to download light novels from https://ln.hako.vn in epub file format for offline reading.
 
@@ -104,6 +112,8 @@ options:
   -m, --mode {fast,slow} download mode: fast (faster, may get blocked) or slow (default, more reliable)
   -c, --chapter ln_url  download specific chapters of a light novel
   -u, --update [ln_url] update all/single light novel
+  -d, --delete          delete downloaded light novels or volumes
+  -i, --interactive     run in interactive mode (TUI)
 ```
 
 #### Download Modes
@@ -131,6 +141,10 @@ python hako2epub.py -u
 ```sh
 python hako2epub.py -u light_novel_url
 ```
+* Delete downloaded light novels or volumes
+```sh
+python hako2epub.py -d
+```
 ### Notes
 * Slow mode (default) includes delays to avoid being blocked by Cloudflare.
 * Fast mode uses more threads and no delays for faster downloads, but may get blocked.
@@ -139,6 +153,8 @@ python hako2epub.py -u light_novel_url
 * If you download specific chapters of a light novel, please enter the full name of the chapter in the "from ... to ..." prompt.
 * If you update the volume which contains specific chapters, only new chapters after the current latest chapter will be added.
 * Try to keep the program and `ln_info.json` file at the same folder with your downloaded light novels for efficiently management.
+* Deleting asks which light novels first, then which of their volumes to remove. Selecting every volume of a light novel also removes its folder and its `ln_info.json` entry.
+* The Android app writes the same `ln_info.json` format, but names folders and files differently (`Tap-1-Novel.epub` here vs `Tap 1 - Novel.epub` on Android), so a library copied between the two will be re-downloaded rather than recognised.
 
 ## Screenshots
 ![Demo](images/demo.png)
