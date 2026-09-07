@@ -1,0 +1,46 @@
+[project]
+name = "hako2epub"
+version = "2.4.0"
+description = "Download light novels from ln.hako.vn to EPUB"
+authors = [{ name = "quantrancse" }]
+license = { text = "MIT" }
+dependencies = [
+    "requests",
+    "bs4",
+    "cloudscraper",
+]
+
+[tool.briefcase]
+project_name = "hako2epub"
+bundle = "com.quantrancse.hako2epub"
+version = "2.4.0"
+
+[tool.briefcase.app.hako2epub]
+formal_name = "hako2epub"
+bundle = "com.quantrancse.hako2epub"
+version = "2.4.0"
+sources = ["src/hako2epub"]
+# Briefcase resolves these as icons/icon-<variant>-<size>.png
+icon = "icons/icon"
+description = "Download light novels from ln.hako.vn to EPUB"
+author = "quantrancse"
+license = "MIT"
+
+# Briefcase runs the `hako2epub` package via its __main__.py.
+# (`[...entry]` and `[...formats.android]` are not Briefcase keys and were
+# silently ignored.)
+[tool.briefcase.app.hako2epub.android]
+requires = [
+    "toga-android>=0.5.0",
+]
+
+# Only needed on API <= 28, where writing into the public Downloads folder
+# requires the legacy storage permission. API 29+ uses MediaStore, which
+# needs no permission, so the request is capped.
+permission."android.permission.WRITE_EXTERNAL_STORAGE" = { "android:maxSdkVersion" = "28" }
+
+# API 30+: the only permission that lets the app read files in
+# Downloads/hako2epub that it did not create itself. Without it a reinstall
+# loses sight of every previous download, because MediaStore only reveals
+# rows the current install owns. Granted from system Settings, not a prompt.
+permission."android.permission.MANAGE_EXTERNAL_STORAGE" = {}
