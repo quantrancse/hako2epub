@@ -157,7 +157,13 @@ python hako2epub.py -d
 * The Android app writes the same `ln_info.json` format, but names folders and files differently (`Tap-1-Novel.epub` here vs `Tap 1 - Novel.epub` on Android), so a library copied between the two will be re-downloaded rather than recognised.
 
 ## Screenshots
+**Windows**
+
 ![Demo](images/demo.png)
+
+**Android**
+
+![Android](images/android.jpg)
 
 <!-- ISSUES -->
 ## Issues
