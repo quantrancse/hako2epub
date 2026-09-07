@@ -1,0 +1,23 @@
+# Signing keys - never commit these. Losing or leaking the release keystore
+# means losing the ability to ship updates under the same app identity.
+*.jks
+*.keystore
+key.properties
+
+# Build output
+build/
+dist/
+android/build/
+android/logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Tool state
+ln_info.json
+*.log
+.DS_Store

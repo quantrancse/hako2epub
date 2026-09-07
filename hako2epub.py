@@ -1,16 +1,3 @@
-"""
-hako2epub - A tool to download light novels from ln.hako.vn in EPUB format.
-
-This tool allows users to download light novels, specific chapters, and update existing downloads.
-
-Features:
-- Download all/single volume of a light novel
-- Download specific chapters of a light novel
-- Update all/single downloaded light novel
-- Support images and navigation
-- Support multiprocessing to speed up downloads
-"""
-
 import threading
 import random
 import argparse
@@ -75,7 +62,7 @@ LINE_SIZE = 80
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.97 Safari/537.36'
 }
-TOOL_VERSION = '2.3.0'
+TOOL_VERSION = '2.4.0'
 HTML_PARSER = 'html.parser'
 
 # Mode configuration
@@ -120,7 +107,6 @@ playwright_worker_lock = threading.Lock()
 session = None
 
 def init_session(mode: str) -> None:
-    """Initialize the request session based on mode."""
     global session
     if mode == 'slow' and cloudscraper is not None:
         session = cloudscraper.create_scraper()
@@ -128,7 +114,6 @@ def init_session(mode: str) -> None:
         session = requests.Session()
 
 def _playwright_worker_loop(queue):
-    """Worker thread that handles Playwright operations."""
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -156,7 +141,6 @@ def _playwright_worker_loop(queue):
         browser.close()
 
 def init_playwright_worker():
-    """Initialize Playwright worker thread."""
     global playwright_queue, playwright_worker
     if playwright_worker is not None and playwright_worker.is_alive():
         return
@@ -165,7 +149,6 @@ def init_playwright_worker():
     playwright_worker.start()
 
 def cleanup_playwright_worker():
-    """Cleanup Playwright worker thread."""
     global playwright_queue, playwright_worker
     if playwright_queue is not None:
         playwright_queue.put(None)
@@ -173,7 +156,6 @@ def cleanup_playwright_worker():
         playwright_worker.join(timeout=10)
 
 def playwright_get_content(url: str) -> str:
-    """Get decoded content using Playwright worker thread."""
     global playwright_queue
     if playwright_queue is None:
         init_playwright_worker()
@@ -194,14 +176,12 @@ def playwright_get_content(url: str) -> str:
 
 @dataclass
 class Chapter:
-    """Represents a chapter in a light novel."""
     name: str
     url: str
 
 
 @dataclass
 class Volume:
-    """Represents a volume in a light novel."""
     url: str = ''
     name: str = ''
     cover_img: str = ''
@@ -211,7 +191,6 @@ class Volume:
 
 @dataclass
 class LightNovel:
-    """Represents a light novel with all its information."""
     name: str = ''
     url: str = ''
     num_volumes: int = 0
@@ -223,7 +202,6 @@ class LightNovel:
 
 
 class ColorCodes:
-    """ANSI color codes for terminal output."""
     HEADER = '\033[95m'
     OKBLUE = '\03[94m'
     OKCYAN = '\033[96m'
@@ -236,24 +214,8 @@ class ColorCodes:
 
 
 class NetworkManager:
-    """Handles network requests with retry logic."""
-
     @staticmethod
     def check_available_request(url: str, stream: bool = False, referer: Optional[str] = None) -> requests.Response:
-        """
-        Check if a request to the given URL is available and handle retries.
-
-        Args:
-            url: The URL to request
-            stream: Whether to stream the response
-            referer: Optional Referer header; defaults to the target domain
-
-        Returns:
-            The response object
-
-        Raises:
-            requests.RequestException: If the request fails after retries
-        """
         global last_request_time
 
         # Rate limiting only in slow mode
@@ -357,11 +319,8 @@ class NetworkManager:
 
 
 class ContentDecoder:
-    """Decode protected chapter content."""
-
     @staticmethod
     def xor_shuffle_decode(encoded_parts: str, key: str) -> str:
-        """Decode xor_shuffle encoded content; returns "" on failure."""
         if not encoded_parts or not key:
             return ""
         try:
@@ -406,7 +365,6 @@ class ContentDecoder:
 
     @staticmethod
     def get_content_with_playwright(url: str) -> str:
-        """Get decoded content using Playwright worker thread."""
         if not USE_PLAYWRIGHT or not PLAYWRIGHT_AVAILABLE:
             return ""
 
@@ -431,32 +389,12 @@ class ContentDecoder:
 
 
 class TextUtils:
-    """Utility functions for text processing."""
-
     @staticmethod
     def format_text(text: str) -> str:
-        """
-        Format text by stripping and replacing newlines.
-
-        Args:
-            text: The text to format
-
-        Returns:
-            The formatted text
-        """
         return text.strip().replace('\n', '')
 
     @staticmethod
     def format_filename(name: str) -> str:
-        """
-        Format filename by removing special characters and limiting length.
-
-        Args:
-            name: The name to format
-
-        Returns:
-            The formatted filename
-        """
         special_chars = ['?', '!', '.', ':', '\\',
                          '/', '<', '>', '|', '*', '"', ',']
         for char in special_chars:
@@ -467,17 +405,15 @@ class TextUtils:
         return name
 
     @staticmethod
+    def novel_folder(ln_name: str) -> str:
+        return TextUtils.format_filename(ln_name)
+
+    @staticmethod
+    def epub_filename(volume_name: str, ln_name: str) -> str:
+        return TextUtils.format_filename(f'{volume_name}-{ln_name}') + '.epub'
+
+    @staticmethod
     def reformat_url(base_url: str, url: str) -> str:
-        """
-        Reformat URL to use the primary domain.
-
-        Args:
-            base_url: The base URL
-            url: The URL to reformat
-
-        Returns:
-            The reformatted URL
-        """
         # Extract domain from base_url
         domain = DOMAINS[0] if DOMAINS else "ln.hako.vn"
 
@@ -495,19 +431,8 @@ class TextUtils:
 
 
 class ImageManager:
-    """Handles image processing and downloading."""
-
     @staticmethod
     def get_image(image_url: str, referer: Optional[str] = None) -> Optional[Image.Image]:
-        """
-        Get image from URL.
-
-        Args:
-            image_url: The image URL
-
-        Returns:
-            The image object or None if failed
-        """
         global last_request_time
 
         if 'imgur.com' in image_url and '.' not in image_url[-5:]:
@@ -540,26 +465,14 @@ class ImageManager:
 
 
 class OutputFormatter:
-    """Handles formatted output to the terminal."""
-
     @staticmethod
     def print_formatted(name: str = '', info: str = '', info_style: str = 'bold fg:orange', prefix: str = '! ') -> None:
-        """
-        Print formatted output using questionary.
-
-        Args:
-            name: The name to print
-            info: The info to print
-            info_style: The style for the info
-            prefix: The prefix for the output
-        """
         questionary.print(prefix, style='bold fg:gray', end='')
         questionary.print(name, style='bold fg:white', end='')
         questionary.print(info, style=info_style)
 
     @staticmethod
     def print_success(message: str, item_name: str = '') -> None:
-        """Print a success message."""
         if item_name:
             print(
                 f'{message} {ColorCodes.OKCYAN}{item_name}{ColorCodes.ENDC}: [{ColorCodes.OKGREEN} DONE {ColorCodes.ENDC}]')
@@ -568,7 +481,6 @@ class OutputFormatter:
 
     @staticmethod
     def print_error(message: str, item_name: str = '') -> None:
-        """Print an error message."""
         if item_name:
             print(
                 f'{message} {ColorCodes.OKCYAN}{item_name}{ColorCodes.ENDC}: [{ColorCodes.FAIL} FAIL {ColorCodes.ENDC}]')
@@ -577,18 +489,10 @@ class OutputFormatter:
 
 
 class UpdateManager:
-    """Handles updating of existing light novels."""
-
     def __init__(self, json_file: str = 'ln_info.json'):
         self.json_file = json_file
 
     def check_updates(self, ln_url: str = 'all') -> None:
-        """
-        Check for updates for light novels.
-
-        Args:
-            ln_url: The light novel URL or 'all' for all novels
-        """
         try:
             if not isfile(self.json_file):
                 logger.warning('Cannot find ln_info.json file!')
@@ -612,13 +516,6 @@ class UpdateManager:
             logger.error(f'Error processing ln_info.json: {e}')
 
     def _check_update_single(self, ln_data: Dict[str, Any], mode: str = '') -> None:
-        """
-        Check for updates for a single light novel.
-
-        Args:
-            ln_data: The light novel data
-            mode: The update mode
-        """
         ln_name = ln_data.get('ln_name', 'Unknown')
         OutputFormatter.print_formatted('Checking update: ', ln_name)
         ln_url = ln_data.get('ln_url')
@@ -650,16 +547,6 @@ class UpdateManager:
             print('-' * LINE_SIZE)
 
     def _get_updated_ln_info(self, ln_url: str, soup: BeautifulSoup) -> LightNovel:
-        """
-        Get updated light novel information.
-
-        Args:
-            ln_url: The light novel URL
-            soup: The parsed HTML
-
-        Returns:
-            Updated light novel information
-        """
         ln = LightNovel()
         ln.url = ln_url
 
@@ -761,13 +648,6 @@ class UpdateManager:
         return ln
 
     def _update_volumes(self, old_ln: Dict[str, Any], new_ln: LightNovel) -> None:
-        """
-        Update volumes for a light novel.
-
-        Args:
-            old_ln: The old light novel data
-            new_ln: The new light novel data
-        """
         old_volume_names = [vol.get('vol_name')
                             for vol in old_ln.get('vol_list', [])]
         new_volume_names = [vol.name for vol in new_ln.volumes]
@@ -815,13 +695,6 @@ class UpdateManager:
                         self._update_new_volume(new_ln, volume)
 
     def _update_light_novel(self, old_ln: Dict[str, Any], new_ln: LightNovel) -> None:
-        """
-        Update a light novel.
-
-        Args:
-            old_ln: The old light novel data
-            new_ln: The new light novel data
-        """
         old_volume_names = [vol.get('vol_name')
                             for vol in old_ln.get('vol_list', [])]
 
@@ -832,13 +705,6 @@ class UpdateManager:
                 self._update_chapters(new_ln, volume, old_ln)
 
     def _update_new_volume(self, ln: LightNovel, volume: Volume) -> None:
-        """
-        Update a new volume.
-
-        Args:
-            ln: The light novel data
-            volume: The volume to update
-        """
         OutputFormatter.print_formatted(
             'Updating volume: ', volume.name, info_style='bold fg:cyan')
 
@@ -859,14 +725,6 @@ class UpdateManager:
         print('-' * LINE_SIZE)
 
     def _update_chapters(self, new_ln: LightNovel, volume: Volume, old_ln: Dict[str, Any]) -> None:
-        """
-        Update new chapters in a volume.
-
-        Args:
-            new_ln: The new light novel data
-            volume: The volume to update
-            old_ln: The old light novel data
-        """
         OutputFormatter.print_formatted(
             'Checking volume: ', volume.name, info_style='bold fg:cyan')
 
@@ -898,12 +756,6 @@ class UpdateManager:
         print('-' * LINE_SIZE)
 
     def update_json(self, ln: LightNovel) -> None:
-        """
-        Update the JSON file with light novel information.
-
-        Args:
-            ln: The light novel data
-        """
         try:
             print('Updating ln_info.json...', end='\r')
 
@@ -981,12 +833,6 @@ class UpdateManager:
             print('-' * LINE_SIZE)
 
     def _create_json(self, ln: LightNovel) -> None:
-        """
-        Create a new JSON file with light novel information.
-
-        Args:
-            ln: The light novel data
-        """
         try:
             print('Creating ln_info.json...', end='\r')
 
@@ -1016,8 +862,6 @@ class UpdateManager:
 
 
 class EpubEngine:
-    """Class for creating and managing EPUB files."""
-
     def __init__(self, json_file: str = 'ln_info.json'):
         self.json_file = json_file
         self.book = None
@@ -1025,12 +869,6 @@ class EpubEngine:
         self.volume = None
 
     def make_cover_image(self) -> Optional[epub.EpubItem]:
-        """
-        Create a cover image for the EPUB.
-
-        Returns:
-            The cover image item or None if failed
-        """
         try:
             print('Making cover image...', end='\r')
             image = ImageManager.get_image(self.volume.cover_img)
@@ -1056,25 +894,11 @@ class EpubEngine:
             return None
 
     def set_metadata(self, title: str, author: str, lang: str = 'vi') -> None:
-        """
-        Set metadata for the EPUB book.
-
-        Args:
-            title: The book title
-            author: The book author
-            lang: The book language
-        """
         self.book.set_title(title)
         self.book.set_language(lang)
         self.book.add_author(author)
 
     def make_intro_page(self) -> epub.EpubHtml:
-        """
-        Create an introduction page for the EPUB.
-
-        Returns:
-            The introduction page
-        """
         print('Making intro page...', end='\r')
         github_url = 'https://github.com/quantrancse/hako2epub'
 
@@ -1109,12 +933,6 @@ class EpubEngine:
         )
 
     def make_chapters(self, start_index: int = 0) -> None:
-        """
-        Create chapters for the EPUB.
-
-        Args:
-            start_index: Starting chapter index
-        """
         chapter_data = []
         for i, (name, url) in enumerate(self.volume.chapters.items(), start_index):
             chapter_data.append((i, name, url))
@@ -1142,15 +960,6 @@ class EpubEngine:
                 self.book.toc.append(content)
 
     def _make_chapter_content(self, chapter_data: Tuple[int, str, str]) -> Optional[Tuple[int, epub.EpubHtml]]:
-        """
-        Create content for a chapter.
-
-        Args:
-            chapter_data: Tuple of (index, name, url)
-
-        Returns:
-            Tuple of (index, chapter content) or None if failed
-        """
         try:
             index, name, url = chapter_data
 
@@ -1224,17 +1033,6 @@ class EpubEngine:
             return None
 
     def _process_images(self, content_div: BeautifulSoup, chapter_id: int, referer: Optional[str] = None) -> str:
-        """
-        Process images in chapter content.
-
-        Args:
-            content_div: The chapter content div
-            chapter_id: The chapter ID
-            referer: Optional referer URL for image requests
-
-        Returns:
-            The processed content with images
-        """
         # Remove unwanted elements
         content_div.find('div', class_='flex')
         for element in content_div.find_all('p', {'target': '__blank'}):
@@ -1277,15 +1075,6 @@ class EpubEngine:
         return content
 
     def _get_chapter_notes(self, soup: BeautifulSoup) -> Dict[str, str]:
-        """
-        Get notes from chapter content.
-
-        Args:
-            soup: The chapter content soup
-
-        Returns:
-            Dictionary of notes
-        """
         notes = {}
         note_divs = soup.find_all('div', id=re.compile("^note"))
         for div in note_divs:
@@ -1300,24 +1089,11 @@ class EpubEngine:
         return notes
 
     def _replace_notes(self, content: str, notes: Dict[str, str]) -> str:
-        """
-        Replace note tags in chapter content.
-
-        Args:
-            content: The chapter content
-            notes: Dictionary of notes
-
-        Returns:
-            The processed chapter content
-        """
         for note_tag, note_text in notes.items():
             content = content.replace(note_tag, note_text)
         return content
 
     def bind_epub_book(self) -> None:
-        """
-        Bind all components into an EPUB book.
-        """
         intro_page = self.make_intro_page()
         self.book.add_item(intro_page)
 
@@ -1340,11 +1116,11 @@ class EpubEngine:
         self.book.add_item(epub.EpubNcx())
         self.book.add_item(epub.EpubNav())
 
-        filename = TextUtils.format_filename(
-            f'{self.volume.name}-{self.light_novel.name}') + '.epub'
+        filename = TextUtils.epub_filename(
+            self.volume.name, self.light_novel.name)
         self.set_metadata(filename, self.light_novel.author)
 
-        folder_name = TextUtils.format_filename(self.light_novel.name)
+        folder_name = TextUtils.novel_folder(self.light_novel.name)
         if not isdir(folder_name):
             mkdir(folder_name)
 
@@ -1358,12 +1134,6 @@ class EpubEngine:
             print('-' * LINE_SIZE)
 
     def create_epub(self, ln: LightNovel) -> None:
-        """
-        Create EPUB files for all volumes.
-
-        Args:
-            ln: The light novel data
-        """
         self.light_novel = ln
         for volume in ln.volumes:
             OutputFormatter.print_formatted(
@@ -1376,16 +1146,8 @@ class EpubEngine:
         self._save_json(ln)
 
     def update_epub(self, ln: LightNovel, volume: Volume) -> None:
-        """
-        Update an existing EPUB file.
-
-        Args:
-            ln: The light novel data
-            volume: The volume to update
-        """
-        filename = TextUtils.format_filename(
-            f'{volume.name}-{ln.name}') + '.epub'
-        folder_name = TextUtils.format_filename(ln.name)
+        filename = TextUtils.epub_filename(volume.name, ln.name)
+        folder_name = TextUtils.novel_folder(ln.name)
         filepath = join(folder_name, filename)
 
         if isfile(filepath):
@@ -1404,8 +1166,6 @@ class EpubEngine:
             self.volume = volume
             self.make_chapters(len(existing_chapters))
 
-            # Remove old TOC
-            # Create a copy to avoid modification during iteration
             for item in self.book.items[:]:
                 if item.file_name == 'toc.ncx':
                     self.book.items.remove(item)
@@ -1426,24 +1186,209 @@ class EpubEngine:
             self.create_epub(ln)
 
     def _save_json(self, ln: LightNovel) -> None:
-        """
-        Save light novel information to JSON.
-
-        Args:
-            ln: The light novel data
-        """
         update_manager = UpdateManager(self.json_file)
         update_manager.update_json(ln)
 
 
-class LightNovelManager:
-    """Manages light novel operations."""
+class DeleteManager:
+    def __init__(self, json_file: str = 'ln_info.json'):
+        self.json_file = json_file
 
+    def delete_interactive(self) -> None:
+        data = self._load_data()
+        ln_list = [ln for ln in data.get('ln_list', []) if ln.get('ln_name')]
+
+        if not ln_list:
+            print('Nothing has been downloaded yet.')
+            print('-' * LINE_SIZE)
+            return
+
+        selected_novels = self._select_novels(ln_list)
+        if not selected_novels:
+            print('No light novel selected.')
+            print('-' * LINE_SIZE)
+            return
+
+        targets = self._select_volumes(selected_novels)
+        if not targets:
+            print('No volume selected.')
+            print('-' * LINE_SIZE)
+            return
+
+        if not self._confirm(targets):
+            print('Deletion cancelled.')
+            print('-' * LINE_SIZE)
+            return
+
+        deleted, missing = self._delete_targets(targets, data)
+
+        OutputFormatter.print_success('Deleting', f'{deleted} volume(s)')
+        if missing:
+            OutputFormatter.print_formatted(
+                'Already gone: ', f'{missing} file(s)')
+        print('-' * LINE_SIZE)
+
+    def _select_novels(self, ln_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        choices = [
+            questionary.Choice(
+                f"{ln.get('ln_name')} ({len(ln.get('vol_list', []))} volumes)",
+                value=ln,
+            )
+            for ln in ln_list
+        ]
+        return questionary.checkbox(
+            'Select light novels to delete from:', choices=choices).ask() or []
+
+    def _select_volumes(self, selected_novels: List[Dict[str, Any]]) -> List[Tuple[Dict[str, Any], str]]:
+        multiple = len(selected_novels) > 1
+        choices = []
+
+        for ln in selected_novels:
+            ln_name = ln.get('ln_name')
+            for volume in ln.get('vol_list', []):
+                volume_name = volume.get('vol_name')
+                if not volume_name:
+                    continue
+                # Only name the light novel when more than one is in play.
+                label = f'{ln_name} - {volume_name}' if multiple else volume_name
+                choices.append(
+                    questionary.Choice(label, value=(ln, volume_name)))
+
+        if not choices:
+            print('The selected light novels have no volumes recorded.')
+            return []
+
+        return questionary.checkbox(
+            'Select volumes to delete '
+            '(selecting every volume deletes the whole light novel):',
+            choices=choices).ask() or []
+
+    def _fully_selected(self, targets: List[Tuple[Dict[str, Any], str]]) -> List[str]:
+        chosen: Dict[str, set] = {}
+        entries: Dict[str, Dict[str, Any]] = {}
+
+        for ln, volume_name in targets:
+            key = ln.get('ln_url') or ln.get('ln_name')
+            chosen.setdefault(key, set()).add(volume_name)
+            entries[key] = ln
+
+        complete = []
+        for key, volume_names in chosen.items():
+            tracked = {
+                volume.get('vol_name')
+                for volume in entries[key].get('vol_list', [])
+            }
+            if tracked and tracked <= volume_names:
+                complete.append(entries[key].get('ln_name'))
+        return complete
+
+    def _confirm(self, targets: List[Tuple[Dict[str, Any], str]]) -> bool:
+        complete = self._fully_selected(targets)
+
+        print('-' * LINE_SIZE)
+        for ln, volume_name in targets:
+            print(f"  {ln.get('ln_name')} - {volume_name}")
+        if complete:
+            print()
+            for ln_name in complete:
+                OutputFormatter.print_formatted(
+                    'Removing entirely: ', ln_name, prefix='! ')
+
+        return bool(
+            questionary.confirm(
+                f'Delete {len(targets)} volume(s)? This cannot be undone.',
+                default=False,
+            ).ask()
+        )
+
+    def _delete_targets(self, targets: List[Tuple[Dict[str, Any], str]], data: Dict[str, Any]) -> Tuple[int, int]:
+        deleted = 0
+        missing = 0
+        touched = []
+
+        for ln, volume_name in targets:
+            ln_name = ln.get('ln_name')
+            folder_name = TextUtils.novel_folder(ln_name)
+            epub_path = join(
+                folder_name, TextUtils.epub_filename(volume_name, ln_name))
+
+            try:
+                os.remove(epub_path)
+                deleted += 1
+            except OSError as e:
+                # Already gone; still forget it so the two don't disagree.
+                logger.warning(f'Could not delete {epub_path}: {e}')
+                missing += 1
+
+            data = self._remove_volume(data, ln.get('ln_url'), volume_name)
+            if ln_name not in touched:
+                touched.append(ln_name)
+
+        for ln_name in touched:
+            self._prune_folder(ln_name)
+
+        self._save_data(data)
+        return deleted, missing
+
+    @staticmethod
+    def _remove_volume(data: Dict[str, Any], ln_url: str, volume_name: str) -> Dict[str, Any]:
+        updated = []
+
+        for entry in data.get('ln_list', []):
+            if entry.get('ln_url') != ln_url:
+                updated.append(entry)
+                continue
+
+            volumes = [
+                volume for volume in entry.get('vol_list', [])
+                if volume.get('vol_name') != volume_name
+            ]
+            if volumes:
+                new_entry = entry.copy()
+                new_entry['vol_list'] = volumes
+                new_entry['num_vol'] = len(volumes)
+                updated.append(new_entry)
+
+        return {'ln_list': updated}
+
+    @staticmethod
+    def _prune_folder(ln_name: str) -> None:
+        folder_name = TextUtils.novel_folder(ln_name)
+        try:
+            if isdir(folder_name) and not os.listdir(folder_name):
+                os.rmdir(folder_name)
+        except OSError as e:
+            logger.warning(f'Could not remove folder {folder_name}: {e}')
+
+    def _load_data(self) -> Dict[str, Any]:
+        if not isfile(self.json_file):
+            return {'ln_list': []}
+        try:
+            with open(self.json_file, 'r', encoding='utf-8') as file:
+                data = json.load(file)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.error(f'Error reading {self.json_file}: {e}')
+            return {'ln_list': []}
+
+        if not isinstance(data, dict) or not isinstance(data.get('ln_list'), list):
+            logger.error(f'{self.json_file} has an unexpected shape')
+            return {'ln_list': []}
+        return data
+
+    def _save_data(self, data: Dict[str, Any]) -> None:
+        try:
+            with open(self.json_file, 'w', encoding='utf-8') as file:
+                json.dump(data, file, indent=4, ensure_ascii=False)
+        except OSError as e:
+            logger.error(f'Error saving {self.json_file}: {e}')
+            OutputFormatter.print_error('Updating ln_info.json')
+
+
+class LightNovelManager:
     def __init__(self):
         self.json_file = 'ln_info.json'
 
     def _check_domains(self) -> None:
-        """Check which domains are accessible."""
         global DOMAINS
         accessible_domains = []
 
@@ -1481,7 +1426,6 @@ class LightNovelManager:
             logger.debug(f"Accessible domains: {DOMAINS}")
 
     def _check_for_updates(self) -> None:
-        """Check for tool updates."""
         try:
             release_api = 'https://api.github.com/repos/quantrancse/hako2epub/releases/latest'
             response = requests.get(release_api, headers=HEADERS, timeout=5)
@@ -1505,15 +1449,6 @@ class LightNovelManager:
             logger.error(f"Unexpected error while checking for updates: {e}")
 
     def _validate_url(self, url: str) -> bool:
-        """
-        Check if a URL is valid and convert to accessible domain if needed.
-
-        Args:
-            url: The URL to check
-
-        Returns:
-            True if valid, False otherwise
-        """
         url_lower = url.lower()
 
         matches = [domain for domain in DOMAINS if domain in url_lower]
@@ -1533,7 +1468,6 @@ class LightNovelManager:
         return False
 
     def _update_json_file(self) -> None:
-        """Update the JSON file by removing entries for deleted novels."""
         try:
             if not isfile(self.json_file):
                 return
@@ -1548,7 +1482,7 @@ class LightNovelManager:
                 if not ln_name:
                     continue
 
-                folder_name = TextUtils.format_filename(ln_name)
+                folder_name = TextUtils.novel_folder(ln_name)
                 if not isdir(folder_name):
                     # Remove entry if folder doesn't exist
                     updated_data['ln_list'] = [entry for entry in updated_data['ln_list']
@@ -1561,8 +1495,8 @@ class LightNovelManager:
                         if not volume_name:
                             continue
 
-                        epub_name = TextUtils.format_filename(
-                            f'{volume_name}-{ln_name}') + '.epub'
+                        epub_name = TextUtils.epub_filename(
+                            volume_name, ln_name)
                         epub_path = join(folder_name, epub_name)
                         if not isfile(epub_path):
                             # Remove volume if EPUB doesn't exist
@@ -1586,13 +1520,10 @@ class LightNovelManager:
             logger.error(f'Error processing ln_info.json: {e}')
 
     def start(self, ln_url: str, mode: str) -> None:
-        """
-        Start the light novel manager.
+        if mode == 'delete':
+            DeleteManager().delete_interactive()
+            return
 
-        Args:
-            ln_url: The light novel URL
-            mode: The mode (default, chapter, update, update_all)
-        """
         # Check domains and tool updates
         self._check_domains()
         self._check_for_updates()
@@ -1613,12 +1544,6 @@ class LightNovelManager:
             print('Please provide a valid URL or use update mode.')
 
     def _download_light_novel(self, ln_url: str) -> None:
-        """
-        Download a light novel.
-
-        Args:
-            ln_url: The light novel URL
-        """
         try:
             response = NetworkManager.check_available_request(ln_url)
             soup = BeautifulSoup(response.text, HTML_PARSER)
@@ -1644,12 +1569,6 @@ class LightNovelManager:
             print('-' * LINE_SIZE)
 
     def _download_chapters(self, ln_url: str) -> None:
-        """
-        Download specific chapters of a light novel.
-
-        Args:
-            ln_url: The light novel URL
-        """
         max_retries = 3
         retry_count = 0
         response = None
@@ -1716,17 +1635,6 @@ class LightNovelManager:
             print('-' * LINE_SIZE)
 
     def _parse_light_novel(self, ln_url: str, soup: BeautifulSoup, mode: str = '') -> LightNovel:
-        """
-        Parse light novel information from HTML.
-
-        Args:
-            ln_url: The light novel URL
-            soup: The parsed HTML
-            mode: The mode
-
-        Returns:
-            The light novel object
-        """
         ln = LightNovel()
         ln.url = ln_url
 
@@ -1838,16 +1746,6 @@ class LightNovelManager:
         return ln
 
     def _parse_volume(self, ln_url: str, volume_section: BeautifulSoup) -> Optional[Volume]:
-        """
-        Parse volume information from HTML section.
-
-        Args:
-            ln_url: The light novel URL
-            volume_section: The volume section HTML
-
-        Returns:
-            The volume object or None if failed
-        """
         volume = Volume()
 
         # Get volume name
@@ -1897,12 +1795,6 @@ class LightNovelManager:
         return volume
 
     def _select_chapters(self, volume: Volume) -> None:
-        """
-        Let user select specific chapters to download.
-
-        Args:
-            volume: The volume to select chapters from
-        """
         if not volume.chapters:
             return
 
@@ -1927,7 +1819,6 @@ class LightNovelManager:
 
 
 def print_title():
-    """Print the application title and banner."""
     hako_banner_len = 66
     padding = ' ' * ((LINE_SIZE - hako_banner_len) // 2)
     print(f"""
@@ -1963,7 +1854,6 @@ def print_title():
 
 
 def check_for_tool_updates():
-    """Check for tool updates."""
     try:
         release_api = 'https://api.github.com/repos/quantrancse/hako2epub/releases/latest'
         response = requests.get(release_api, headers=HEADERS, timeout=5)
@@ -1988,7 +1878,6 @@ def check_for_tool_updates():
 
 
 def run_tui():
-    """Run the text user interface."""
     global CURRENT_MODE, THREAD_NUM, REQUEST_DELAY, IMAGE_DELAY, REQUEST_TIMEOUT, USE_CLOUDSCRAPER, USE_PLAYWRIGHT
     
     # Ask for mode selection at startup
@@ -2023,6 +1912,7 @@ def run_tui():
             'Download specific chapters of a light novel',
             'Update all downloaded light novels',
             'Update a light novel',
+            'Delete downloaded light novels',
             'Exit'
         ]
 
@@ -2041,6 +1931,8 @@ def run_tui():
         elif option == 'Update a light novel':
             ln_url = questionary.text('Enter light novel url:').ask()
             manager.start(ln_url, 'update')
+        elif option == 'Delete downloaded light novels':
+            manager.start(None, 'delete')
         elif option == 'Exit':
             break
 
@@ -2057,7 +1949,6 @@ def run_tui():
 
 
 def main():
-    """Main entry point for the application."""
     global CURRENT_MODE, THREAD_NUM, REQUEST_DELAY, IMAGE_DELAY, REQUEST_TIMEOUT, USE_CLOUDSCRAPER, USE_PLAYWRIGHT
 
     # For .exe distribution, default to TUI mode when launched with no arguments
@@ -2079,6 +1970,8 @@ def main():
                         help='download specific chapters of a light novel')
     parser.add_argument('-u', '--update', type=str, metavar='ln_url', nargs='?', default=argparse.SUPPRESS,
                         help='update all/single light novel')
+    parser.add_argument('-d', '--delete', action='store_true',
+                        help='delete downloaded light novels or volumes')
     parser.add_argument('-i', '--interactive', action='store_true',
                         help='run in interactive mode (TUI)')
 
@@ -2106,6 +1999,8 @@ def main():
     try:
         if args.interactive:
             run_tui()
+        elif args.delete:
+            manager.start(None, 'delete')
         elif args.chapter:
             manager.start(args.chapter, 'chapter')
         elif 'update' in args:
